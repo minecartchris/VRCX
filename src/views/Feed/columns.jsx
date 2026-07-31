@@ -204,8 +204,37 @@ const expandedRow = ({ row }) => {
         );
     }
 
+    if (type === 'Plugin') {
+        return (
+            <div class="pl-5 text-sm">
+                <Badge variant="outline" class="mb-1 text-muted-foreground">
+                    {original.pluginName || original.pluginId}
+                </Badge>
+                <div>{original.message}</div>
+                {original.detail ? (
+                    <pre class="mt-1 text-xs leading-5.5 whitespace-pre-wrap font-[inherit] text-muted-foreground">
+                        {original.detail}
+                    </pre>
+                ) : null}
+            </div>
+        );
+    }
+
     return null;
 };
+
+/**
+ * Plugin entries are not necessarily about a person, so the level doubles as
+ * the visual cue the user column normally carries.
+ *
+ * @param {string} level
+ * @returns {string}
+ */
+function pluginLevelVariant(level) {
+    return level === 'error' || level === 'warning'
+        ? 'destructive'
+        : 'secondary';
+}
 
 export const columns = [
     {
@@ -292,6 +321,18 @@ export const columns = [
         meta: { label: () => t('table.feed.user') },
         cell: ({ row }) => {
             const original = row.original;
+            // A plugin entry only names a user when the plugin chose to attach
+            // one; otherwise the plugin itself is the actor.
+            if (original.type === 'Plugin' && !original.userId) {
+                return (
+                    <Badge
+                        variant={pluginLevelVariant(original.level)}
+                        class="max-w-full truncate"
+                    >
+                        {original.pluginName || original.pluginId}
+                    </Badge>
+                );
+            }
             const friend = getFriendStore().friends.get(original.userId);
             return (
                 <UserContextMenu
@@ -410,6 +451,14 @@ export const columns = [
                 return (
                     <span class="block w-full min-w-0 truncate">
                         {original.bio}
+                    </span>
+                );
+            }
+
+            if (type === 'Plugin') {
+                return (
+                    <span class="block w-full min-w-0 truncate">
+                        {original.message}
                     </span>
                 );
             }

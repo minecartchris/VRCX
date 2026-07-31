@@ -1,8 +1,16 @@
 <template>
     <div class="flex flex-col gap-10 py-2">
-        <div class="flex flex-col gap-1.5 pl-0.5">
-            <p class="m-0 text-sm text-muted-foreground">{{ t('view.plugins.intro') }}</p>
-            <p v-if="!oscSupported" class="m-0 text-sm text-destructive">{{ t('view.plugins.osc_unavailable') }}</p>
+        <div class="flex items-start justify-between gap-6 pl-0.5">
+            <div class="flex flex-col gap-1.5">
+                <p class="m-0 text-sm text-muted-foreground">{{ t('view.plugins.intro') }}</p>
+                <p v-if="!oscSupported" class="m-0 text-sm text-destructive">
+                    {{ t('view.plugins.osc_unavailable') }}
+                </p>
+            </div>
+            <Button size="sm" variant="outline" class="shrink-0 gap-1.5" @click="importOpen = true">
+                <i class="ri-github-line" />
+                {{ t('view.plugins.import.button') }}
+            </Button>
         </div>
 
         <SettingsGroup v-for="category in categories" :key="category.key" :title="t(category.labelKey)">
@@ -36,6 +44,22 @@
 
                 <div class="flex items-center gap-2 shrink-0">
                     <Button
+                        v-if="plugin.external"
+                        size="sm"
+                        variant="ghost"
+                        :aria-label="t('view.plugins.import.update')"
+                        @click="update(plugin)">
+                        <i class="ri-refresh-line" />
+                    </Button>
+                    <Button
+                        v-if="plugin.external"
+                        size="sm"
+                        variant="ghost"
+                        :aria-label="t('view.plugins.import.remove')"
+                        @click="remove(plugin)">
+                        <i class="ri-delete-bin-line" />
+                    </Button>
+                    <Button
                         v-if="plugin.settingsSchema?.length"
                         size="sm"
                         variant="ghost"
@@ -52,6 +76,7 @@
         </SettingsGroup>
 
         <PluginSettingsDialog v-model:open="dialogOpen" :plugin="selectedPlugin" :settings="selectedSettings" />
+        <PluginImportDialog v-model:open="importOpen" />
     </div>
 </template>
 
@@ -62,26 +87,41 @@
     import { Badge } from '@/components/ui/badge';
     import { Button } from '@/components/ui/button';
     import { Switch } from '@/components/ui/switch';
+    import PluginImportDialog from '../PluginImportDialog.vue';
     import PluginSettingsDialog from '../PluginSettingsDialog.vue';
     import SettingsGroup from '../SettingsGroup.vue';
-    import { getAllPlugins, getPlugin, pluginCategories, pluginState, setPluginEnabled } from '@/plugin-system';
+    import {
+        externalPlugins,
+        getAllPlugins,
+        getPlugin,
+        pluginCategories,
+        pluginState,
+        setPluginEnabled,
+        uninstallExternalPlugin,
+        updateExternalPlugin
+    } from '@/plugin-system';
     import { oscService } from '@/services/osc';
+    import { toast } from 'vue-sonner';
 
     const { t, te } = useI18n();
 
     const dialogOpen = ref(false);
+    const importOpen = ref(false);
     const selectedPlugin = ref(null);
 
     const oscSupported = oscService.isSupported;
 
-    const categories = computed(() =>
-        pluginCategories
+    const categories = computed(() => {
+        // `externalPlugins` is only read so this recomputes when an import is
+        // added or removed — the registry itself is not reactive.
+        void externalPlugins.length;
+        return pluginCategories
             .map((category) => ({
                 ...category,
                 plugins: getAllPlugins().filter((plugin) => plugin.category === category.key)
             }))
-            .filter((category) => category.plugins.length > 0)
-    );
+            .filter((category) => category.plugins.length > 0);
+    });
 
     const selectedSettings = computed(() => {
         const id = selectedPlugin.value?.id;
@@ -135,5 +175,23 @@
     function configure(plugin) {
         selectedPlugin.value = plugin;
         dialogOpen.value = true;
+    }
+
+    async function update(plugin) {
+        try {
+            await updateExternalPlugin(plugin.id);
+            toast.success(t('view.plugins.import.updated', { name: plugin.name }));
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err));
+        }
+    }
+
+    async function remove(plugin) {
+        try {
+            await uninstallExternalPlugin(plugin.id);
+            toast.success(t('view.plugins.import.removed', { name: plugin.name }));
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err));
+        }
     }
 </script>

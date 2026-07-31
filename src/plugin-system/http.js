@@ -29,6 +29,23 @@ export async function getJson(url, { headers } = {}) {
 
 /**
  * @param {string} url
+ * @param {{headers?: Record<string, string>}} [options]
+ * @returns {Promise<string>} raw response body
+ */
+export async function getText(url, { headers } = {}) {
+    const response = await webApiService.execute({
+        url,
+        method: 'GET',
+        headers: { ...DEFAULT_HEADERS, ...headers }
+    });
+    if (response.status < 200 || response.status >= 300) {
+        throw new Error(`GET ${url} failed with status ${response.status}`);
+    }
+    return response.data ?? '';
+}
+
+/**
+ * @param {string} url
  * @param {*} body serialised as JSON
  * @param {{headers?: Record<string, string>}} [options]
  * @returns {Promise<{status: number, data?: string}>}

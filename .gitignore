@@ -7,6 +7,7 @@ obj1/
 *.DotSettings.user
 .vs/
 Installer/version_define.nsh
+Installer/VRCX_Setup.exe
 bun.lock
 
 .env.sentry-build-plugin

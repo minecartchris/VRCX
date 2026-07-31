@@ -22,6 +22,8 @@ export const PluginEvents = Object.freeze({
     PLAYER_LEAVE: 'playerLeave',
     /** A video/media URL started playing in the current instance. `{ videoName, videoUrl, displayName }` */
     VIDEO_PLAY: 'videoPlay',
+    /** Someone in the current instance switched avatar. `{ userId, displayName, avatarName, avatarId }` */
+    AVATAR_CHANGE: 'avatarChange',
     /** A friend came online. `{ userId, displayName, location }` */
     FRIEND_ONLINE: 'friendOnline',
     /** A friend went offline. `{ userId, displayName }` */

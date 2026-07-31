@@ -124,8 +124,57 @@ export const useFeedStore = defineStore('Feed', () => {
                     return true;
                 }
                 return false;
+            case 'Plugin':
+                if (String(row.message).toUpperCase().includes(value)) {
+                    return true;
+                }
+                if (String(row.detail).toUpperCase().includes(value)) {
+                    return true;
+                }
+                if (String(row.pluginName).toUpperCase().includes(value)) {
+                    return true;
+                }
+                if (String(row.displayName).toUpperCase().includes(value)) {
+                    return true;
+                }
+                return false;
         }
         return true;
+    }
+
+    /**
+     * Plugin entries are stored separately from the friend-event feed tables,
+     * so they are fetched on their own and merged into the same table.
+     *
+     * @param {string} search
+     * @param {string} dateFrom
+     * @param {string} dateTo
+     * @param {string[]} vipList
+     * @returns {Promise<object[]>}
+     */
+    async function lookupPluginFeed(search, dateFrom, dateTo, vipList) {
+        const filter = feedTable.value.filter;
+        if (filter.length > 0 && !filter.includes('Plugin')) {
+            return [];
+        }
+        try {
+            const rows = await database.lookupPluginFeedDatabase(
+                search,
+                dateFrom,
+                dateTo,
+                vrcxStore.maxTableSize
+            );
+            if (vipList.length === 0) {
+                return rows;
+            }
+            // A plugin entry only survives the favourites filter when it is
+            // actually about a favourited user.
+            const vip = new Set(vipList);
+            return rows.filter((row) => vip.has(row.userId));
+        } catch (err) {
+            console.error('[feed] plugin feed lookup failed', err);
+            return [];
+        }
     }
 
     async function feedTableLookup() {
@@ -145,9 +194,9 @@ export const useFeedStore = defineStore('Feed', () => {
             }
             const search = feedTable.value.search.trim();
             const { dateFrom, dateTo } = feedTable.value;
-            const rows =
+            const [rows, pluginRows] = await Promise.all([
                 search || dateFrom || dateTo
-                    ? await database.searchFeedDatabase(
+                    ? database.searchFeedDatabase(
                           search,
                           feedTable.value.filter,
                           vipList,
@@ -155,12 +204,18 @@ export const useFeedStore = defineStore('Feed', () => {
                           dateFrom,
                           dateTo
                       )
-                    : await database.lookupFeedDatabase(
+                    : database.lookupFeedDatabase(
                           feedTable.value.filter,
                           vipList
-                      );
+                      ),
+                lookupPluginFeed(search, dateFrom, dateTo, vipList)
+            ]);
             feedTableData.value = [];
-            feedTableData.value = [...feedTableData.value, ...rows];
+            feedTableData.value = pluginRows.length
+                ? [...rows, ...pluginRows].sort((a, b) =>
+                      String(b.created_at).localeCompare(String(a.created_at))
+                  )
+                : [...rows];
         } finally {
             feedTable.value.loading = false;
         }

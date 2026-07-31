@@ -266,7 +266,8 @@
                 "Offline": "Offline",
                 "Status": "Status",
                 "Avatar": "Avatar",
-                "Bio": "Bio"
+                "Bio": "Bio",
+                "Plugin": "Plugin"
             },
             "photon_event_logging": "Photon Event Logging"
         },
@@ -1314,6 +1315,24 @@
             "reset_defaults": "Reset to defaults",
             "save": "Save",
             "cancel": "Cancel",
+            "import": {
+                "button": "Import from GitHub",
+                "title": "Import a plugin from GitHub",
+                "description": "Paste a plugin code. VRCX reads vrcx-plugin.json from that repository and shows you the plugin before anything is installed.",
+                "code_label": "Plugin code",
+                "code_hint": "owner/repo, owner/repo@branch, owner/repo/folder@tag, or a github.com link.",
+                "fetch": "Fetch",
+                "loading": "Fetching…",
+                "review_source": "Review the code that will run",
+                "source_size": "Entry file: {kb} KB",
+                "warning": "An imported plugin is not sandboxed. It runs with the same access to your machine and your VRChat account as VRCX itself. Only import code from an author you trust, and read it first.",
+                "install": "Install",
+                "installed": "Installed {name}. Turn it on when you are ready.",
+                "update": "Re-fetch from GitHub",
+                "updated": "Updated {name}.",
+                "remove": "Remove plugin",
+                "removed": "Removed {name}."
+            },
             "category": {
                 "chatbox": "Chatbox",
                 "osc": "OSC",
@@ -1397,6 +1416,10 @@
                 "playtime_insights": {
                     "name": "Playtime insights",
                     "description": "Tracks daily playtime and time per world, with an optional daily limit reminder."
+                },
+                "avatar_change_log": {
+                    "name": "Avatar change log",
+                    "description": "Keeps a log of who in your instance switched avatar, and when."
                 }
             }
         }

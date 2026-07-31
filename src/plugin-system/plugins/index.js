@@ -1,3 +1,4 @@
+import { avatarChangeLogPlugin } from './avatarChangeLog';
 import { chatboxClockPlugin } from './chatboxClock';
 import { chatboxCustomTextPlugin } from './chatboxCustomText';
 import { chatboxHeartRatePlugin } from './chatboxHeartRate';
@@ -41,5 +42,6 @@ export const builtinPlugins = [
     joinLeaveTtsPlugin,
     keywordAlertsPlugin,
     discordWebhookPlugin,
-    playtimeInsightsPlugin
+    playtimeInsightsPlugin,
+    avatarChangeLogPlugin
 ];

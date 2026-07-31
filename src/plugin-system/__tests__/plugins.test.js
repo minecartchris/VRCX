@@ -4,6 +4,12 @@ import { buildDefaultSettings } from '../settingsSchema';
 import { builtinPlugins } from '../plugins';
 import { validateManifest } from '../registry';
 import { entryToSearchableText, findKeyword } from '../plugins/keywordAlerts';
+import {
+    formatChange,
+    normalizeAvatarChange,
+    pushHistory,
+    shouldRecord
+} from '../plugins/avatarChangeLog';
 import { formatHours, localDayKey } from '../plugins/playtimeInsights';
 import { formatSessionDuration } from '../plugins/chatboxSessionStats';
 import { isWatched } from '../plugins/friendWatchlist';
@@ -117,6 +123,92 @@ describe('weather helpers', () => {
         expect(weatherIcon(0)).toBe('☀️');
         expect(weatherIcon(3)).toBe('☁️');
         expect(weatherIcon(95)).toBe('⛈️');
+    });
+});
+
+describe('avatar change log helpers', () => {
+    test('normalizes a full photon payload', () => {
+        const record = normalizeAvatarChange({
+            userId: 'usr_1',
+            displayName: 'Alice',
+            avatarName: 'CoolAvatar',
+            avatarId: 'avtr_1',
+            authorId: 'usr_2',
+            createdAt: '2024-01-05T10:00:00.000Z'
+        });
+        expect(record).toEqual({
+            userId: 'usr_1',
+            displayName: 'Alice',
+            avatarName: 'CoolAvatar',
+            avatarId: 'avtr_1',
+            authorId: 'usr_2',
+            at: Date.parse('2024-01-05T10:00:00.000Z')
+        });
+    });
+
+    test('fills in the gaps left by the log-file parser', () => {
+        const record = normalizeAvatarChange(
+            { displayName: 'Alice', avatarName: 'CoolAvatar' },
+            1000
+        );
+        expect(record.avatarId).toBe('');
+        expect(record.authorId).toBe('');
+        expect(record.at).toBe(1000);
+    });
+
+    test('rejects an entry that identifies nobody', () => {
+        expect(normalizeAvatarChange({ avatarName: 'X' })).toBeNull();
+        expect(normalizeAvatarChange(null)).toBeNull();
+    });
+
+    test('rate limits repeat changes by the same person', () => {
+        const lastSeen = new Map();
+        const base = { userId: 'usr_1', displayName: 'Alice' };
+        expect(shouldRecord(lastSeen, { ...base, at: 0 }, 10000)).toBe(true);
+        expect(shouldRecord(lastSeen, { ...base, at: 5000 }, 10000)).toBe(
+            false
+        );
+        expect(shouldRecord(lastSeen, { ...base, at: 10000 }, 10000)).toBe(
+            true
+        );
+    });
+
+    test('rate limits each person independently', () => {
+        const lastSeen = new Map();
+        expect(shouldRecord(lastSeen, { userId: 'usr_1', at: 0 }, 10000)).toBe(
+            true
+        );
+        expect(shouldRecord(lastSeen, { userId: 'usr_2', at: 0 }, 10000)).toBe(
+            true
+        );
+    });
+
+    test('falls back to display name when there is no user id', () => {
+        const lastSeen = new Map();
+        const record = { userId: '', displayName: 'Alice', at: 0 };
+        expect(shouldRecord(lastSeen, record, 10000)).toBe(true);
+        expect(shouldRecord(lastSeen, { ...record, at: 1 }, 10000)).toBe(false);
+    });
+
+    test('history keeps the newest entries within the limit', () => {
+        let history = [];
+        for (let i = 0; i < 5; i += 1) {
+            history = pushHistory(history, { at: i }, 3);
+        }
+        expect(history.map((entry) => entry.at)).toEqual([2, 3, 4]);
+    });
+
+    test('history tolerates a corrupt stored value', () => {
+        expect(pushHistory(null, { at: 1 }, 10)).toEqual([{ at: 1 }]);
+    });
+
+    test('formats with and without an avatar name', () => {
+        expect(
+            formatChange({ displayName: 'Alice', avatarName: 'CoolAvatar' })
+        ).toBe('Alice → CoolAvatar');
+        expect(formatChange({ displayName: 'Alice', avatarName: '' })).toBe(
+            'Alice changed avatar'
+        );
     });
 });
 

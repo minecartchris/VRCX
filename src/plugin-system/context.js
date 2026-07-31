@@ -3,6 +3,7 @@ import * as workerTimers from 'worker-timers';
 
 import configRepository from '../services/config';
 import { pluginBus, PluginEvents } from './eventBus';
+import { writePluginFeed } from './feed';
 
 /**
  * Per-plugin runtime context.
@@ -22,6 +23,7 @@ import { pluginBus, PluginEvents } from './eventBus';
  * @property {(handler: Function, ms: number) => number} timeout
  * @property {(source: *, cb: Function, options?: object) => void} watch
  * @property {(dispose: Function) => void} onDispose
+ * @property {(message: string, options?: {detail?: string, level?: string, userId?: string, displayName?: string}) => Promise<object|null>} feed
  * @property {{get: (key: string, fallback?: *) => Promise<*>, set: (key: string, value: *) => Promise<void>}} storage
  * @property {(message: string, detail?: string) => void} log
  * @property {(message: string, detail?: *) => void} warn
@@ -45,7 +47,7 @@ function storageKey(pluginId, key) {
  * @param {(status: {state?: string, detail?: string}) => void} [options.onStatus]
  * @returns {PluginContext & {dispose: () => Promise<void>}}
  */
-export function createPluginContext({ id, settings, onStatus }) {
+export function createPluginContext({ id, name, settings, onStatus }) {
     /** @type {Function[]} */
     const disposers = [];
     let disposed = false;
@@ -158,6 +160,23 @@ export function createPluginContext({ id, settings, onStatus }) {
         },
 
         onDispose,
+
+        /**
+         * Writes a line into the Feed tab's "Plugin" category.
+         *
+         * @param {string} message
+         * @param {{detail?: string, level?: 'info'|'success'|'warning'|'error', userId?: string, displayName?: string, createdAt?: string}} [options]
+         * @returns {Promise<object | null>}
+         */
+        feed(message, options) {
+            return writePluginFeed(
+                { pluginId: id, pluginName: name, message },
+                options
+            ).catch((err) => {
+                console.error(`[plugin:${id}] feed write failed`, err);
+                return null;
+            });
+        },
 
         log(message, detail) {
             console.log(`[plugin:${id}] ${message}`, detail ?? '');

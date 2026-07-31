@@ -94,6 +94,21 @@ export function registerPlugins(manifests) {
 }
 
 /**
+ * Removes a plugin from the registry. Only imported plugins are removable —
+ * the built-ins are part of the app.
+ *
+ * @param {string} id
+ * @returns {boolean} whether anything was removed
+ */
+export function unregisterPlugin(id) {
+    const manifest = registry.get(id);
+    if (!manifest?.external) {
+        return false;
+    }
+    return registry.delete(id);
+}
+
+/**
  * @param {string} id
  * @returns {PluginManifest | undefined}
  */

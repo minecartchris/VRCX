@@ -67,6 +67,95 @@ const feed = {
         );
     },
 
+    addPluginFeedToDatabase(entry) {
+        sqliteService.executeNonQuery(
+            `INSERT INTO ${dbVars.userPrefix}_feed_plugin (created_at, plugin_id, plugin_name, level, message, detail, user_id, display_name) VALUES (@created_at, @plugin_id, @plugin_name, @level, @message, @detail, @user_id, @display_name)`,
+            {
+                '@created_at': entry.created_at,
+                '@plugin_id': entry.pluginId,
+                '@plugin_name': entry.pluginName,
+                '@level': entry.level,
+                '@message': entry.message,
+                '@detail': entry.detail,
+                '@user_id': entry.userId,
+                '@display_name': entry.displayName
+            }
+        );
+    },
+
+    /**
+     * Plugin entries live in their own table rather than the feed UNION: they
+     * carry an arbitrary message instead of the fixed friend-event columns, and
+     * keeping them separate leaves the existing feed queries untouched.
+     *
+     * @param {string} [search]
+     * @param {string} [dateFrom] ISO date string
+     * @param {string} [dateTo] ISO date string
+     * @param {number} [maxEntries]
+     * @returns {Promise<object[]>} newest first
+     */
+    async lookupPluginFeedDatabase(
+        search = '',
+        dateFrom = '',
+        dateTo = '',
+        maxEntries = dbVars.maxTableSize
+    ) {
+        const args = { '@limit': maxEntries };
+        let where = '1=1';
+        if (search) {
+            where +=
+                ' AND (message LIKE @searchLike OR detail LIKE @searchLike OR plugin_name LIKE @searchLike OR display_name LIKE @searchLike)';
+            args['@searchLike'] = `%${search}%`;
+        }
+        if (dateFrom) {
+            where += ' AND created_at >= @dateFrom';
+            args['@dateFrom'] = dateFrom;
+        }
+        if (dateTo) {
+            where += ' AND created_at <= @dateTo';
+            args['@dateTo'] = dateTo;
+        }
+
+        const rows = [];
+        await sqliteService.execute(
+            (dbRow) => {
+                rows.push({
+                    rowId: dbRow[0],
+                    created_at: dbRow[1],
+                    type: 'Plugin',
+                    pluginId: dbRow[2],
+                    pluginName: dbRow[3],
+                    level: dbRow[4] || 'info',
+                    message: dbRow[5] ?? '',
+                    detail: dbRow[6] ?? '',
+                    userId: dbRow[7] ?? '',
+                    displayName: dbRow[8] ?? ''
+                });
+            },
+            `SELECT id, created_at, plugin_id, plugin_name, level, message, detail, user_id, display_name FROM ${dbVars.userPrefix}_feed_plugin WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT @limit`,
+            args
+        );
+        return rows;
+    },
+
+    /**
+     * @param {string|null} cutoffDate - ISO date string. Deletes records older than this date. If null, deletes all records.
+     */
+    async purgePluginFeedData(cutoffDate) {
+        if (cutoffDate) {
+            await sqliteService.executeNonQuery(
+                `DELETE FROM ${dbVars.userPrefix}_feed_plugin WHERE created_at < @cutoff`,
+                {
+                    '@cutoff': cutoffDate
+                }
+            );
+        } else {
+            await sqliteService.executeNonQuery(
+                `DELETE FROM ${dbVars.userPrefix}_feed_plugin`
+            );
+        }
+    },
+
     /**
      * Purges avatar feed data from the database.
      * !!!!

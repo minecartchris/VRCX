@@ -75,6 +75,20 @@ export function startPluginSources({
                             displayName: entry.displayName ?? ''
                         });
                         break;
+                    case 'AvatarChange':
+                        // Photon supplies the full avatar ref; the log-file
+                        // parser only knows a name, so the id fields are
+                        // frequently absent.
+                        pluginBus.emit(PluginEvents.AVATAR_CHANGE, {
+                            userId: entry.userId ?? '',
+                            displayName: entry.displayName ?? '',
+                            avatarName: entry.name ?? '',
+                            avatarId: entry.avatarId ?? '',
+                            authorId: entry.authorId ?? '',
+                            releaseStatus: entry.releaseStatus ?? '',
+                            createdAt: entry.created_at ?? ''
+                        });
+                        break;
                     default:
                         break;
                 }

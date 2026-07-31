@@ -76,6 +76,12 @@ const database = {
             `CREATE INDEX IF NOT EXISTS ${dbVars.userPrefix}_feed_online_offline_user_created_idx ON ${dbVars.userPrefix}_feed_online_offline (user_id, created_at)`
         );
         await sqliteService.executeNonQuery(
+            `CREATE TABLE IF NOT EXISTS ${dbVars.userPrefix}_feed_plugin (id INTEGER PRIMARY KEY, created_at TEXT, plugin_id TEXT, plugin_name TEXT, level TEXT, message TEXT, detail TEXT, user_id TEXT, display_name TEXT)`
+        );
+        await sqliteService.executeNonQuery(
+            `CREATE INDEX IF NOT EXISTS ${dbVars.userPrefix}_feed_plugin_created_idx ON ${dbVars.userPrefix}_feed_plugin (created_at)`
+        );
+        await sqliteService.executeNonQuery(
             `CREATE TABLE IF NOT EXISTS ${dbVars.userPrefix}_activity_sync_state_v2 (
                 user_id TEXT PRIMARY KEY,
                 updated_at TEXT NOT NULL DEFAULT '',

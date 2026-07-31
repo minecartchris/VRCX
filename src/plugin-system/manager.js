@@ -165,6 +165,7 @@ export function activatePlugin(id, { persist = true } = {}) {
 
         const context = createPluginContext({
             id,
+            name: manifest.name,
             settings: state.settings,
             /**
              * @param {{state?: 'ok'|'warning'|'error', detail?: string}} status

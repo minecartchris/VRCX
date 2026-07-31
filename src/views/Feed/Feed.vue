@@ -116,7 +116,7 @@
     const vrcxStore = useVrcxStore();
 
     const { t, locale } = useI18n();
-    const feedFilterTypes = ['GPS', 'Online', 'Offline', 'Status', 'Avatar', 'Bio'];
+    const feedFilterTypes = ['GPS', 'Online', 'Offline', 'Status', 'Avatar', 'Bio', 'Plugin'];
 
     const popoverOpen = ref(false);
     const todayDate = today(getLocalTimeZone());

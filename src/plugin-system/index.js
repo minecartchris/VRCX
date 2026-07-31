@@ -6,6 +6,7 @@ import {
 } from '../stores';
 import { builtinPlugins } from './plugins';
 import { initPluginManager, shutdownPlugins } from './manager';
+import { loadExternalPlugins } from './external';
 import { registerPlugins } from './registry';
 import { startPluginSources, stopPluginSources } from './sources';
 
@@ -20,6 +21,9 @@ let registered = false;
 export async function initPluginSystem() {
     if (!registered) {
         registerPlugins(builtinPlugins);
+        // Imported plugins must be in the registry before the manager reads
+        // persisted enable flags, or an enabled import would not start.
+        await loadExternalPlugins();
         registered = true;
     }
 
@@ -43,6 +47,8 @@ export async function teardownPluginSystem() {
 
 export * from './chatbox';
 export * from './eventBus';
+export * from './external';
+export * from './remote';
 export * from './manager';
 export * from './registry';
 export * from './settingsSchema';
