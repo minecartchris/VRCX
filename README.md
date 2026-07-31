@@ -55,6 +55,35 @@ Beta/nightly build available [here](https://vrcx.app/github/nightly) or in-app `
 - :skull: Automatically restart and join last instance when VRC crashes
 - :left_right_arrow: Export/import data
   - Export friends list, avatar list, Discord names, notes, and favorite groups. Import favorite groups and group moderation bans.
+- :jigsaw: Plugins
+  - Optional, individually toggleable features with their own settings, found under `Settings -> Plugins`. Everything is off by default, so nothing runs unless you turn it on.
+
+## Plugins
+
+Plugins live in `Settings -> Plugins`. Each one can be enabled on its own and has its own configuration; disabling a plugin releases every timer, socket and listener it created.
+
+| Plugin | What it does |
+| --- | --- |
+| OSC Chatbox | Drives the VRChat chatbox over OSC. Combines or rotates through the chatbox modules below. Required by all of them. |
+| Chatbox: Clock | Current time and date, with a custom format and optional timezone. |
+| Chatbox: Custom text | Your own rotating messages, with `{name}`, `{status}`, `{world}`, `{players}`, `{instance}` and `{time}` variables. |
+| Chatbox: Instance stats | World name, instance type, player count, friends present and time in instance. |
+| Chatbox: System stats | CPU and memory usage of this PC. |
+| Chatbox: Heart rate | Live BPM from Pulsoid, HypeRate, or any websocket that emits JSON. |
+| Chatbox: Weather | Current conditions for a location of your choice, via Open-Meteo (no API key needed). |
+| Chatbox: Now playing | The video currently playing in your instance. |
+| Chatbox: Session time | How long the current VRChat session has been running. |
+| Chatbox: Network | Round-trip latency to the VRChat API. |
+| OSC avatar parameters | Tracks avatar parameters sent by VRChat and can show chosen ones in the chatbox. |
+| AFK detection | Reads VRChat's AFK parameter over OSC, optionally switching your status while you are away and restoring it when you return. |
+| Friend watchlist | Dedicated desktop/XSOverlay alerts when specific friends come online or change instance. |
+| Instance radar | Flags players you have blocked or muted when they join, and counts repeat encounters with strangers. |
+| Spoken join/leave | Announces joins and leaves with text to speech, filterable to friends or favorites. |
+| Keyword alerts | Alerts you when a word you care about appears in the game log. |
+| Discord webhook relay | Posts world changes, instance joins and friend activity to a Discord webhook. |
+| Playtime insights | Tracks daily playtime and time per world, with an optional daily reminder. |
+
+OSC based plugins need `OSC -> Enabled` turned on in the VRChat radial menu.
 
 ## Miscellaneous
 

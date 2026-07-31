@@ -358,6 +358,28 @@ declare global {
             opacity: number,
             image?: string
         ): Promise<void>;
+
+        // OSC
+        OscStart(
+            host: string,
+            sendPort: number,
+            receivePort: number
+        ): Promise<boolean>;
+        OscStop(): Promise<void>;
+        OscIsRunning(): Promise<boolean>;
+        OscSendChatbox(
+            text: string,
+            send: boolean,
+            sound: boolean
+        ): Promise<boolean>;
+        OscSendTyping(typing: boolean): Promise<boolean>;
+        OscSendFloat(address: string, value: number): Promise<boolean>;
+        OscSendInt(address: string, value: number): Promise<boolean>;
+        OscSendBool(address: string, value: boolean): Promise<boolean>;
+        OscPollMessages(): Promise<string>;
+
+        // System metrics
+        GetSystemStats(): Promise<string>;
     };
 
     const AppApiVr: {

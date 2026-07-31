@@ -737,7 +737,8 @@
                 "social": "Social",
                 "vr": "VR",
                 "media": "Media",
-                "integrations": "Integrations"
+                "integrations": "Integrations",
+                "plugins": "Plugins"
             },
             "social": {
                 "interaction": {
@@ -1299,6 +1300,103 @@
                         "filter_everyone": "Everyone",
                         "timeout_threshold": "Timeout Threshold"
                     }
+                }
+            }
+        },
+        "plugins": {
+            "header": "Plugins",
+            "intro": "Plugins are optional features. Only the ones you turn on run, and each one keeps its own settings.",
+            "osc_unavailable": "OSC is not available in this build of VRCX, so OSC based plugins cannot start.",
+            "configure": "Configure",
+            "experimental": "Experimental",
+            "requires": "Requires {plugins}",
+            "no_settings": "This plugin has no settings.",
+            "reset_defaults": "Reset to defaults",
+            "save": "Save",
+            "cancel": "Cancel",
+            "category": {
+                "chatbox": "Chatbox",
+                "osc": "OSC",
+                "social": "Social",
+                "automation": "Automation",
+                "insights": "Insights",
+                "integration": "Integrations"
+            },
+            "field": {
+                "add_entry": "Type and press enter"
+            },
+            "items": {
+                "osc_chatbox": {
+                    "name": "OSC Chatbox",
+                    "description": "Drives the VRChat chatbox over OSC. Turn on chatbox modules below to fill it with content."
+                },
+                "chatbox_clock": {
+                    "name": "Chatbox: Clock",
+                    "description": "Adds the current time and date to the OSC chatbox."
+                },
+                "chatbox_custom_text": {
+                    "name": "Chatbox: Custom text",
+                    "description": "Rotates through your own messages, with variables for your name, world and player count."
+                },
+                "chatbox_instance_stats": {
+                    "name": "Chatbox: Instance stats",
+                    "description": "Adds the current world, instance type, player count and time in instance."
+                },
+                "chatbox_system_stats": {
+                    "name": "Chatbox: System stats",
+                    "description": "Adds CPU and memory usage of this PC to the chatbox."
+                },
+                "chatbox_heart_rate": {
+                    "name": "Chatbox: Heart rate",
+                    "description": "Streams your heart rate from Pulsoid or HypeRate into the chatbox."
+                },
+                "chatbox_weather": {
+                    "name": "Chatbox: Weather",
+                    "description": "Adds current weather for a location of your choice, powered by Open-Meteo."
+                },
+                "chatbox_now_playing": {
+                    "name": "Chatbox: Now playing",
+                    "description": "Shows the video currently playing in your instance in the chatbox."
+                },
+                "chatbox_session_stats": {
+                    "name": "Chatbox: Session time",
+                    "description": "Shows how long your current VRChat session has been running."
+                },
+                "chatbox_network_stats": {
+                    "name": "Chatbox: Network",
+                    "description": "Shows round-trip latency to the VRChat API in the chatbox."
+                },
+                "osc_avatar_parameters": {
+                    "name": "OSC avatar parameters",
+                    "description": "Listens for avatar parameters from VRChat and can surface chosen ones in the chatbox."
+                },
+                "osc_afk_status": {
+                    "name": "AFK detection",
+                    "description": "Detects the VRChat AFK state over OSC and can change your status automatically."
+                },
+                "friend_watchlist": {
+                    "name": "Friend watchlist",
+                    "description": "Get a dedicated alert when specific friends come online or change instance."
+                },
+                "instance_radar": {
+                    "name": "Instance radar",
+                    "description": "Flags moderated users and repeat encounters when players join your instance."
+                },
+                "join_leave_tts": {
+                    "name": "Spoken join/leave",
+                    "description": "Announces players joining and leaving your instance with text to speech."
+                },
+                "keyword_alerts": {
+                    "name": "Keyword alerts",
+                    "description": "Alerts you when a word you care about shows up in the game log."
+                },
+                "discord_webhook": {
+                    "name": "Discord webhook relay",
+                    "description": "Posts world changes, joins and friend activity to a Discord webhook."
+                },
+                "playtime_insights": {
+                    "name": "Playtime insights",
+                    "description": "Tracks daily playtime and time per world, with an optional daily limit reminder."
                 }
             }
         }

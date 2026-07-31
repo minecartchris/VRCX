@@ -33,6 +33,7 @@
     import { TooltipProvider } from './components/ui/tooltip';
     import { createGlobalStores } from './stores';
     import { initNoty } from './plugins/noty';
+    import { initPluginSystem } from './plugin-system';
 
     import AlertDialogModal from './components/ui/alert-dialog/AlertDialogModal.vue';
     import DatabaseUpgradeDialog from './components/dialogs/DatabaseUpgradeDialog.vue';
@@ -73,6 +74,9 @@
             await store.auth.migrateStoredUsers();
             store.auth.autoLoginAfterMounted();
             store.vrcx.checkAutoBackupRestoreVrcRegistry();
+            // Plugins persist their state in the config database, so they can
+            // only start once it is ready.
+            initPluginSystem().catch((err) => console.error('Failed to init plugin system', err));
         }
 
         runCheckVRChatDebugLoggingFlow();
