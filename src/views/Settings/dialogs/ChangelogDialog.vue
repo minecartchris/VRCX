@@ -18,7 +18,7 @@
                 <Button
                     variant="ghost"
                     class="mr-2"
-                    @click="openExternalLink('https://github.com/vrcx-team/VRCX/releases')">
+                    @click="openExternalLink('https://github.com/minecartchris/VRCX/releases')">
                     {{ t('dialog.change_log.github') }}
                 </Button>
                 <Button @click="closeDialog">

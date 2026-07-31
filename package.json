@@ -5,15 +5,15 @@
     "keywords": [
         "vrchat"
     ],
-    "homepage": "https://github.com/vrcx-team/VRCX#readme",
+    "homepage": "https://github.com/minecartchris/VRCX#readme",
     "bugs": {
-        "url": "https://github.com/vrcx-team/VRCX/issues"
+        "url": "https://github.com/minecartchris/VRCX/issues"
     },
     "license": "MIT",
     "author": "VRCX Team",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/vrcx-team/VRCX.git"
+        "url": "git+https://github.com/minecartchris/VRCX.git"
     },
     "main": "src-electron/main.js",
     "scripts": {

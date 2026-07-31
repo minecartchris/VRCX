@@ -183,7 +183,7 @@ namespace VRCX
                     e, "Database error", MessageBoxButtons.YesNo, MessageBoxIcon.Error);
                 if (messageBoxResult == DialogResult.Yes)
                 {
-                    AppApiInstance.OpenLink("https://github.com/vrcx-team/VRCX/wiki#how-to-repair-vrcx-database");
+                    AppApiInstance.OpenLink("https://github.com/minecartchris/VRCX/wiki#how-to-repair-vrcx-database");
                 }
             }
 
