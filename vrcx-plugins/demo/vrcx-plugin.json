@@ -1,0 +1,62 @@
+{
+    "id": "demo-kitchen-sink",
+    "name": "Demo: kitchen sink",
+    "description": "Exercises every part of the plugin API. Use it to check that importing works and to copy from when writing your own.",
+    "version": "1.0.0",
+    "icon": "ri-flask-line",
+    "category": "automation",
+    "entry": "index.js",
+    "settingsSchema": [
+        {
+            "key": "greeting",
+            "type": "string",
+            "label": "Greeting",
+            "description": "Written to the Feed when the plugin starts.",
+            "default": "Demo plugin is running"
+        },
+        {
+            "key": "logJoins",
+            "type": "boolean",
+            "label": "Log players joining to the Feed",
+            "default": true
+        },
+        {
+            "key": "logAvatarChanges",
+            "type": "boolean",
+            "label": "Log avatar changes to the Feed",
+            "default": false
+        },
+        {
+            "key": "showInChatbox",
+            "type": "boolean",
+            "label": "Show a counter in the chatbox",
+            "default": false
+        },
+        {
+            "key": "chatboxPrefix",
+            "type": "string",
+            "label": "Chatbox prefix",
+            "default": "🧪 Seen: "
+        },
+        {
+            "key": "order",
+            "type": "number",
+            "label": "Chatbox position",
+            "default": 200,
+            "min": 0,
+            "max": 999
+        },
+        {
+            "key": "level",
+            "type": "select",
+            "label": "Feed level",
+            "default": "info",
+            "options": [
+                { "value": "info", "label": "Info" },
+                { "value": "success", "label": "Success" },
+                { "value": "warning", "label": "Warning" },
+                { "value": "error", "label": "Error" }
+            ]
+        }
+    ]
+}

@@ -2,7 +2,9 @@ import { readonly, watch } from 'vue';
 import * as workerTimers from 'worker-timers';
 
 import configRepository from '../services/config';
+import { oscService } from '../services/osc';
 import { pluginBus, PluginEvents } from './eventBus';
+import { registerChatboxSource } from './chatbox';
 import { writePluginFeed } from './feed';
 
 /**
@@ -23,6 +25,8 @@ import { writePluginFeed } from './feed';
  * @property {(handler: Function, ms: number) => number} timeout
  * @property {(source: *, cb: Function, options?: object) => void} watch
  * @property {(dispose: Function) => void} onDispose
+ * @property {(render: () => (string|null|undefined), options?: {label?: string, order?: number}) => (() => void)} chatbox
+ * @property {(handler: (message: {address: string, args: any[]}) => void, config?: {host?: string, sendPort?: number, receivePort?: number}) => Promise<boolean>} oscListen
  * @property {(message: string, options?: {detail?: string, level?: string, userId?: string, displayName?: string}) => Promise<object|null>} feed
  * @property {{get: (key: string, fallback?: *) => Promise<*>, set: (key: string, value: *) => Promise<void>}} storage
  * @property {(message: string, detail?: string) => void} log
@@ -160,6 +164,61 @@ export function createPluginContext({ id, name, settings, onStatus }) {
         },
 
         onDispose,
+
+        /**
+         * Contributes a line to the OSC chatbox.
+         *
+         * Imported plugins cannot import VRCX modules, so this is their only
+         * route to the chatbox. The source is torn down with the plugin.
+         *
+         * @param {() => (string | null | undefined)} render
+         * @param {{label?: string, order?: number}} [options]
+         * @returns {() => void} unregister
+         */
+        chatbox(render, options = {}) {
+            if (typeof render !== 'function') {
+                throw new TypeError('chatbox(render) needs a function');
+            }
+            const unregister = registerChatboxSource({
+                id,
+                label: options.label || name || id,
+                order: Number.isFinite(Number(options.order))
+                    ? Number(options.order)
+                    : 100,
+                render
+            });
+            onDispose(unregister);
+            return unregister;
+        },
+
+        /**
+         * Receives OSC messages.
+         *
+         * The transport is shared and reference counted, so passing a
+         * `receivePort` different from the one already in use re-opens it for
+         * every plugin. Only override it when listening to something other
+         * than VRChat.
+         *
+         * @param {(message: {address: string, args: any[]}) => void} handler
+         * @param {{host?: string, sendPort?: number, receivePort?: number}} [config]
+         * @returns {Promise<boolean>} whether the transport opened
+         */
+        async oscListen(handler, config = {}) {
+            if (typeof handler !== 'function') {
+                throw new TypeError('oscListen(handler) needs a function');
+            }
+            const off = oscService.onMessage((message) => {
+                try {
+                    handler(message);
+                } catch (err) {
+                    console.error(`[plugin:${id}] osc handler`, err);
+                }
+            });
+            onDispose(off);
+            const opened = await oscService.acquire(id, config);
+            onDispose(() => oscService.release(id));
+            return opened;
+        },
 
         /**
          * Writes a line into the Feed tab's "Plugin" category.

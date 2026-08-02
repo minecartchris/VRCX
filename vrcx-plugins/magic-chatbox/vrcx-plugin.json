@@ -1,0 +1,68 @@
+{
+    "id": "magic-chatbox-status",
+    "name": "Magic ChatBox status",
+    "description": "Imports a MagicChatbox status export and cycles your saved statuses through the VRCX chatbox.",
+    "version": "1.0.0",
+    "icon": "ri-magic-line",
+    "category": "chatbox",
+    "entry": "index.js",
+    "settingsSchema": [
+        {
+            "key": "statusJson",
+            "type": "text",
+            "label": "Status export",
+            "description": "Paste the contents of the StatusItems JSON exported from MagicChatbox.",
+            "default": "",
+            "placeholder": "{ \"Version\": 2, \"Groups\": [...], \"Items\": [...] }"
+        },
+        {
+            "key": "onlyActiveGroups",
+            "type": "boolean",
+            "label": "Only groups marked active for cycling",
+            "description": "Respects IsActiveForCycle from the export.",
+            "default": true
+        },
+        {
+            "key": "onlyUseInCycle",
+            "type": "boolean",
+            "label": "Only statuses marked for cycling",
+            "description": "Respects UseInCycle from the export. Turn off to use every status.",
+            "default": true
+        },
+        {
+            "key": "cycle",
+            "type": "boolean",
+            "label": "Cycle through statuses",
+            "description": "Off shows only the first matching status.",
+            "default": true
+        },
+        {
+            "key": "intervalSeconds",
+            "type": "number",
+            "label": "Seconds per status",
+            "default": 4,
+            "min": 1,
+            "max": 600
+        },
+        {
+            "key": "random",
+            "type": "boolean",
+            "label": "Random order",
+            "default": true
+        },
+        {
+            "key": "prefix",
+            "type": "string",
+            "label": "Prefix",
+            "default": ""
+        },
+        {
+            "key": "order",
+            "type": "number",
+            "label": "Chatbox position",
+            "default": 10,
+            "min": 0,
+            "max": 999
+        }
+    ]
+}
