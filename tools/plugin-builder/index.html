@@ -118,6 +118,31 @@
                 font-size: 12px;
                 margin: 4px 0 10px;
             }
+            .cat {
+                margin-bottom: 8px;
+                border-radius: 8px;
+                overflow: hidden;
+                border: 1px solid var(--line);
+            }
+            .cat-head {
+                color: #fff;
+                padding: 6px 10px;
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                cursor: pointer;
+                user-select: none;
+            }
+            .cat-body {
+                padding: 6px;
+                background: var(--panel-2);
+            }
+            .cat-body .palette-item {
+                margin-bottom: 5px;
+            }
+            .cat-body .palette-item:last-child {
+                margin-bottom: 0;
+            }
             .stack {
                 border: 1px solid var(--line);
                 border-radius: var(--radius);
@@ -287,20 +312,16 @@
             <!-- Palette -->
             <div>
                 <div class="panel" style="margin-bottom: 14px">
-                    <h2>Triggers</h2>
-                    <p class="hint">Drag onto the canvas to start a stack.</p>
-                    <div id="paletteTriggers"></div>
-                </div>
-                <div class="panel" style="margin-bottom: 14px">
-                    <h2>Actions</h2>
-                    <p class="hint">Drag into a trigger.</p>
-                    <div id="paletteActions"></div>
+                    <h2>Blocks</h2>
+                    <p class="hint">
+                        Drag an event onto the canvas, then drag blocks into
+                        it. Click a heading to collapse it.
+                    </p>
+                    <div id="palette"></div>
                 </div>
                 <div class="panel">
-                    <h2>Instance</h2>
-                    <p class="hint">
-                        Usable in any text box, in any block.
-                    </p>
+                    <h2>Placeholders</h2>
+                    <p class="hint">Click to copy. Works in any text box.</p>
                     <div id="instanceFields" style="display: flex; flex-wrap: wrap; gap: 4px"></div>
                 </div>
             </div>
@@ -433,69 +454,158 @@
                         base.children = [];
                     } else if (type === 'forEachPlayer') {
                         base.children = [];
+                    } else if (type === 'forEachFriend') {
+                        base.only = 'all';
+                        base.children = [];
+                    } else if (type === 'forEachItem') {
+                        base.name = 'my list';
+                        base.children = [];
+                    } else if (type === 'listAdd') {
+                        base.name = 'my list';
+                        base.text = '{{displayName}}';
+                    } else if (type === 'listClear') {
+                        base.name = 'my list';
+                    } else if (type === 'groupInvite') {
+                        base.groupId = 'grp_';
+                        base.userId = '{{userId}}';
+                    } else if (type === 'apiCall') {
+                        base.endpoint = 'auth/user';
+                        base.method = 'GET';
                     }
                     return base;
                 }
 
                 // ---------- palette ----------
+                function categoryColor(key) {
+                    var found = CG.CATEGORIES.filter(function (c) {
+                        return c.key === key;
+                    })[0];
+                    return found ? found.color : 'var(--action)';
+                }
+
+                /**
+                 * Scratch-style palette: one collapsible, colour-coded section
+                 * per category, events first.
+                 */
                 function buildPalette() {
-                    var t = document.getElementById('paletteTriggers');
-                    var a = document.getElementById('paletteActions');
-                    Object.keys(CG.TRIGGERS).forEach(function (key) {
-                        var btn = document.createElement('button');
-                        btn.className = 'palette-item t-trigger';
-                        btn.textContent = CG.TRIGGERS[key].label;
-                        btn.draggable = true;
-                        btn.addEventListener('dragstart', function (ev) {
-                            ev.dataTransfer.setData(
-                                'text/plain',
-                                JSON.stringify({ kind: 'trigger', key: key })
-                            );
+                    var host = document.getElementById('palette');
+                    host.innerHTML = '';
+
+                    CG.CATEGORIES.forEach(function (category) {
+                        var section = el('div', 'cat');
+                        var header = el('div', 'cat-head');
+                        header.style.background = category.color;
+                        header.appendChild(el('span', null, category.label));
+                        var body = el('div', 'cat-body');
+
+                        header.addEventListener('click', function () {
+                            body.style.display =
+                                body.style.display === 'none' ? '' : 'none';
                         });
-                        btn.addEventListener('click', function () {
+                        section.appendChild(header);
+
+                        if (category.key === 'events') {
+                            Object.keys(CG.TRIGGERS).forEach(function (key) {
+                                body.appendChild(
+                                    paletteButton(
+                                        'trigger',
+                                        key,
+                                        CG.TRIGGERS[key].label,
+                                        category.color
+                                    )
+                                );
+                            });
+                        } else {
+                            Object.keys(CG.ACTIONS).forEach(function (key) {
+                                if (CG.ACTIONS[key].category !== category.key) {
+                                    return;
+                                }
+                                body.appendChild(
+                                    paletteButton(
+                                        'action',
+                                        key,
+                                        CG.ACTIONS[key].label,
+                                        category.color
+                                    )
+                                );
+                            });
+                        }
+                        section.appendChild(body);
+                        host.appendChild(section);
+                    });
+                }
+
+                function paletteButton(kind, key, label, color) {
+                    var btn = document.createElement('button');
+                    btn.className = 'palette-item';
+                    btn.style.background = color;
+                    btn.textContent = label;
+                    btn.draggable = true;
+                    btn.addEventListener('dragstart', function (ev) {
+                        ev.dataTransfer.setData(
+                            'text/plain',
+                            JSON.stringify({ kind: kind, key: key })
+                        );
+                    });
+                    btn.addEventListener('click', function () {
+                        if (kind === 'trigger') {
                             addTrigger(key);
-                        });
-                        t.appendChild(btn);
+                            return;
+                        }
+                        if (project.stacks.length === 0) {
+                            alert('Add a trigger first.');
+                            return;
+                        }
+                        project.stacks[
+                            project.stacks.length - 1
+                        ].actions.push(newAction(key));
+                        render();
                     });
-                    Object.keys(CG.ACTIONS).forEach(function (key) {
-                        var btn = document.createElement('button');
-                        btn.className =
-                            'palette-item ' +
-                            (key === 'stop' ? 't-flow' : 't-action');
-                        btn.textContent = CG.ACTIONS[key].label;
-                        btn.draggable = true;
-                        btn.addEventListener('dragstart', function (ev) {
-                            ev.dataTransfer.setData(
-                                'text/plain',
-                                JSON.stringify({ kind: 'action', key: key })
-                            );
-                        });
-                        btn.addEventListener('click', function () {
-                            if (project.stacks.length === 0) {
-                                alert('Add a trigger first.');
-                                return;
-                            }
-                            project.stacks[project.stacks.length - 1].actions.push(
-                                newAction(key)
-                            );
-                            render();
-                        });
-                        a.appendChild(btn);
-                    });
+                    return btn;
                 }
 
                 function buildInstanceHints() {
                     var host = document.getElementById('instanceFields');
-                    CG.INSTANCE_FIELDS.forEach(function (field) {
-                        var token = '{{instance.' + field + '}}';
-                        var chip = el('button', 'tag', field);
-                        chip.title = 'Click to copy ' + token;
-                        chip.style.cursor = 'pointer';
-                        chip.addEventListener('click', function () {
-                            copy(token, chip);
+
+                    function chipRow(title, tokens) {
+                        host.appendChild(
+                            el('div', 'hint', title)
+                        ).style.cssText = 'width:100%;margin:6px 0 2px';
+                        tokens.forEach(function (entry) {
+                            var chip = el('button', 'tag', entry.label);
+                            chip.title = 'Click to copy ' + entry.token;
+                            chip.style.cursor = 'pointer';
+                            chip.addEventListener('click', function () {
+                                copy(entry.token, chip);
+                            });
+                            host.appendChild(chip);
                         });
-                        host.appendChild(chip);
-                    });
+                    }
+
+                    chipRow(
+                        'Instance',
+                        CG.INSTANCE_FIELDS.map(function (field) {
+                            return {
+                                label: field,
+                                token: '{{instance.' + field + '}}'
+                            };
+                        })
+                    );
+                    chipRow('Inside a loop', [
+                        { label: 'player', token: '{{player}}' },
+                        { label: 'friend', token: '{{friend}}' },
+                        { label: 'friendId', token: '{{friendId}}' },
+                        { label: 'friendStatus', token: '{{friendStatus}}' },
+                        { label: 'item', token: '{{item}}' }
+                    ]);
+                    chipRow('Lists and counters', [
+                        { label: 'list contents', token: '{{list.my_list}}' },
+                        {
+                            label: 'list size',
+                            token: '{{list.my_list.count}}'
+                        },
+                        { label: 'counter', token: '{{counter.count}}' }
+                    ]);
                 }
 
                 function addTrigger(key) {
@@ -584,7 +694,9 @@
                     var wrap = el('div', 'stack');
                     wrap.style.margin = '0';
                     var head = el('div', 'stack-head');
-                    head.style.background = 'var(--flow)';
+                    head.style.background = categoryColor(
+                        CG.ACTIONS[action.type].category
+                    );
                     head.appendChild(
                         el('strong', null, CG.ACTIONS[action.type].label)
                     );
@@ -630,6 +742,37 @@
                         }
                     } else if (action.type === 'forEachPlayer') {
                         head.appendChild(el('span', null, '· use {{player}}'));
+                    } else if (action.type === 'forEachFriend') {
+                        head.appendChild(
+                            selectInput(
+                                [
+                                    { value: 'all', label: 'all friends' },
+                                    { value: 'online', label: 'online only' },
+                                    {
+                                        value: 'favorites',
+                                        label: 'favourites only'
+                                    }
+                                ],
+                                action.only,
+                                function (v) {
+                                    action.only = v;
+                                }
+                            )
+                        );
+                        head.appendChild(
+                            el('span', null, '· use {{friend}} {{friendId}}')
+                        );
+                    } else if (action.type === 'forEachItem') {
+                        head.appendChild(
+                            textInput(
+                                action.name,
+                                function (v) {
+                                    action.name = v;
+                                },
+                                'list name'
+                            )
+                        );
+                        head.appendChild(el('span', null, '· use {{item}}'));
                     }
 
                     var del = el('button', 'icon-btn', '✕');
@@ -669,9 +812,9 @@
                     if (CG.ACTIONS[action.type].container) {
                         return renderContainer(list, action);
                     }
-                    var block = el(
-                        'div',
-                        'block' + (action.type === 'stop' ? ' flow' : '')
+                    var block = el('div', 'block');
+                    block.style.background = categoryColor(
+                        CG.ACTIONS[action.type].category
                     );
                     block.appendChild(el('label', null, CG.ACTIONS[action.type].label));
 
@@ -719,6 +862,79 @@
                                     action.name = v;
                                 },
                                 'counter name'
+                            )
+                        );
+                    } else if (action.type === 'listClear') {
+                        block.appendChild(
+                            textInput(
+                                action.name,
+                                function (v) {
+                                    action.name = v;
+                                },
+                                'list name'
+                            )
+                        );
+                    } else if (action.type === 'listAdd') {
+                        block.appendChild(
+                            textInput(
+                                action.name,
+                                function (v) {
+                                    action.name = v;
+                                },
+                                'list name'
+                            )
+                        );
+                        block.appendChild(el('label', null, '←'));
+                        block.appendChild(
+                            textInput(
+                                action.text,
+                                function (v) {
+                                    action.text = v;
+                                },
+                                'value'
+                            )
+                        );
+                    } else if (action.type === 'groupInvite') {
+                        block.appendChild(
+                            textInput(
+                                action.groupId,
+                                function (v) {
+                                    action.groupId = v;
+                                },
+                                'grp_...'
+                            )
+                        );
+                        block.appendChild(el('label', null, '←'));
+                        block.appendChild(
+                            textInput(
+                                action.userId,
+                                function (v) {
+                                    action.userId = v;
+                                },
+                                'usr_... or {{userId}}'
+                            )
+                        );
+                    } else if (action.type === 'apiCall') {
+                        block.appendChild(
+                            selectInput(
+                                ['GET', 'POST', 'PUT', 'DELETE'].map(
+                                    function (m) {
+                                        return { value: m, label: m };
+                                    }
+                                ),
+                                action.method,
+                                function (v) {
+                                    action.method = v;
+                                }
+                            )
+                        );
+                        block.appendChild(
+                            textInput(
+                                action.endpoint,
+                                function (v) {
+                                    action.endpoint = v;
+                                },
+                                'endpoint, e.g. auth/user'
                             )
                         );
                     } else if (action.type === 'stop') {

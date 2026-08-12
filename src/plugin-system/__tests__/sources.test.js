@@ -11,6 +11,7 @@ vi.mock('worker-timers', () => ({
 const { pluginBus, PluginEvents } = await import('../eventBus');
 const {
     emptyInstanceSnapshot,
+    getFriendSnapshot,
     getInstanceSnapshot,
     startPluginSources,
     stopPluginSources
@@ -144,6 +145,36 @@ describe('plugin sources', () => {
         expect(Object.keys(getInstanceSnapshot()).sort()).toEqual(
             Object.keys(emptyInstanceSnapshot()).sort()
         );
+    });
+
+    test('the friend snapshot flattens the store and sorts by name', () => {
+        stores.friendStore.friends = new Map([
+            [
+                'usr_z',
+                { name: 'Zoe', state: 'online', ref: { status: 'active' } }
+            ],
+            ['usr_a', { name: 'Alice', state: 'offline', ref: {} }]
+        ]);
+        stores.friendStore.localFavoriteFriends = new Set(['usr_z']);
+
+        const friends = getFriendSnapshot();
+        expect(friends.map((f) => f.displayName)).toEqual(['Alice', 'Zoe']);
+        expect(friends[0]).toMatchObject({
+            userId: 'usr_a',
+            isOnline: false,
+            isFavorite: false
+        });
+        expect(friends[1]).toMatchObject({
+            userId: 'usr_z',
+            isOnline: true,
+            isFavorite: true,
+            status: 'active'
+        });
+    });
+
+    test('the friend snapshot is empty rather than throwing when unloaded', () => {
+        stores.friendStore.friends = new Map();
+        expect(getFriendSnapshot()).toEqual([]);
     });
 
     test('every game log entry still reaches the generic gameLog event', async () => {

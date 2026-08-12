@@ -35,6 +35,26 @@ function fakeContext(settings) {
         chatbox: [],
         feeds: [],
         status: null,
+        apiCalls: [],
+        invites: [],
+        friends: [
+            {
+                userId: 'usr_a',
+                displayName: 'Alice',
+                status: 'active',
+                location: 'wrld_1',
+                isOnline: true,
+                isFavorite: true
+            },
+            {
+                userId: 'usr_b',
+                displayName: 'Bob',
+                status: 'offline',
+                location: 'offline',
+                isOnline: false,
+                isFavorite: false
+            }
+        ],
         instance: {
             inInstance: true,
             worldName: 'The Great Pug',
@@ -76,6 +96,15 @@ function fakeContext(settings) {
                 return Promise.resolve(null);
             },
             instance: () => record.instance,
+            friends: () => record.friends,
+            api: (endpoint, options) => {
+                record.apiCalls.push({ endpoint, options });
+                return Promise.resolve({});
+            },
+            inviteToGroup: (groupId, userId) => {
+                record.invites.push({ groupId, userId });
+                return Promise.resolve({});
+            },
             log: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
@@ -472,6 +501,314 @@ describe('control flow blocks', () => {
         expect(() =>
             compileRemotePlugin(source, 'empty-container')
         ).not.toThrow();
+    });
+});
+
+describe('friend list blocks', () => {
+    test('iterates every friend with name and id available', async () => {
+        const built = build({
+            id: 'friend-loop',
+            name: 'Friend loop',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'forEachFriend',
+                            children: [
+                                {
+                                    type: 'feed',
+                                    text: '{{friend}} ({{friendId}})'
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.feeds.map((f) => f.message)).toEqual([
+            'Alice (usr_a)',
+            'Bob (usr_b)'
+        ]);
+    });
+
+    test('can filter to online friends only', async () => {
+        const built = build({
+            id: 'online-only',
+            name: 'Online only',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'forEachFriend',
+                            only: 'online',
+                            children: [{ type: 'feed', text: '{{friend}}' }]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.feeds.map((f) => f.message)).toEqual(['Alice']);
+    });
+
+    test('can filter to favourites only', async () => {
+        const built = build({
+            id: 'favs-only',
+            name: 'Favs only',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'forEachFriend',
+                            only: 'favorites',
+                            children: [{ type: 'feed', text: '{{friend}}' }]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.feeds.map((f) => f.message)).toEqual(['Alice']);
+    });
+});
+
+describe('list variables', () => {
+    test('adds, reads and counts a list', async () => {
+        const built = build({
+            id: 'list-basics',
+            name: 'List basics',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'listAdd', name: 'seen', text: 'one' },
+                        { type: 'listAdd', name: 'seen', text: 'two' },
+                        {
+                            type: 'status',
+                            text: '{{list.seen.count}}: {{list.seen}}'
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('2: one, two');
+    });
+
+    test('empties a list', async () => {
+        const built = build({
+            id: 'list-clear',
+            name: 'List clear',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'listAdd', name: 'x', text: 'a' },
+                        { type: 'listClear', name: 'x' },
+                        { type: 'status', text: 'n={{list.x.count}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('n=0');
+    });
+
+    test('loops over a list', async () => {
+        const built = build({
+            id: 'list-loop',
+            name: 'List loop',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'listAdd', name: 'names', text: 'a' },
+                        { type: 'listAdd', name: 'names', text: 'b' },
+                        {
+                            type: 'forEachItem',
+                            name: 'names',
+                            children: [{ type: 'feed', text: 'item {{item}}' }]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.feeds.map((f) => f.message)).toEqual([
+            'item a',
+            'item b'
+        ]);
+    });
+
+    test('collecting friends into a list then looping it works', async () => {
+        const built = build({
+            id: 'collect',
+            name: 'Collect',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'forEachFriend',
+                            only: 'online',
+                            children: [
+                                {
+                                    type: 'listAdd',
+                                    name: 'online',
+                                    text: '{{friend}}'
+                                }
+                            ]
+                        },
+                        { type: 'status', text: 'online: {{list.online}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('online: Alice');
+    });
+
+    test('an unknown list name stays literal', async () => {
+        const built = build({
+            id: 'bad-list',
+            name: 'Bad list',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [{ type: 'status', text: '{{list.nothing}}' }]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('{{list.nothing}}');
+    });
+
+    test('mutating a list while looping it does not loop forever', async () => {
+        const built = build({
+            id: 'self-append',
+            name: 'Self append',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'listAdd', name: 'q', text: 'a' },
+                        {
+                            type: 'forEachItem',
+                            name: 'q',
+                            children: [
+                                { type: 'listAdd', name: 'q', text: 'more' }
+                            ]
+                        },
+                        { type: 'status', text: '{{list.q.count}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('2');
+    });
+});
+
+describe('VRChat blocks', () => {
+    test('group invite passes group and user through', async () => {
+        const built = build({
+            id: 'inviter',
+            name: 'Inviter',
+            settings: [
+                {
+                    key: 'groupId',
+                    type: 'string',
+                    label: 'Group',
+                    default: 'grp_123'
+                }
+            ],
+            stacks: [
+                {
+                    trigger: 'playerJoin',
+                    actions: [
+                        {
+                            type: 'groupInvite',
+                            groupId: '{{setting.groupId}}',
+                            userId: '{{userId}}'
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        built.record.handlers.get('PLAYER_JOIN')({
+            displayName: 'Alice',
+            userId: 'usr_a'
+        });
+        expect(built.record.invites).toEqual([
+            { groupId: 'grp_123', userId: 'usr_a' }
+        ]);
+    });
+
+    test('api call uses the chosen method', async () => {
+        const built = build({
+            id: 'api-caller',
+            name: 'Api caller',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'apiCall',
+                            endpoint: 'users/{{instance.ownerId}}',
+                            method: 'GET'
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.apiCalls).toEqual([
+            { endpoint: 'users/usr_owner', options: { method: 'GET' } }
+        ]);
+    });
+
+    test('an unrecognised method falls back to GET', () => {
+        const { source } = codegen.generate({
+            id: 'bad-method',
+            name: 'Bad method',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'apiCall',
+                            endpoint: 'x',
+                            method: 'DROP TABLE'
+                        }
+                    ]
+                }
+            ]
+        });
+        expect(source).toContain('method: "GET"');
+    });
+
+    test('a failed API call does not abort the rest of the stack', async () => {
+        const built = build({
+            id: 'resilient',
+            name: 'Resilient',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'apiCall', endpoint: 'boom', method: 'GET' },
+                        { type: 'status', text: 'still running' }
+                    ]
+                }
+            ]
+        });
+        built.ctx.api = () => Promise.reject(new Error('nope'));
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('still running');
     });
 });
 

@@ -69,16 +69,60 @@
         }
     };
 
+    /**
+     * Palette categories, in display order. Colours are Scratch-ish: one hue
+     * per category so a stack is readable at a glance.
+     */
+    var CATEGORIES = [
+        { key: 'events', label: 'Events', color: '#d9822b' },
+        { key: 'output', label: 'Output', color: '#3f8cd6' },
+        { key: 'control', label: 'Control', color: '#8e63c9' },
+        { key: 'variables', label: 'Variables', color: '#c9612f' },
+        { key: 'vrchat', label: 'VRChat', color: '#2f9e63' }
+    ];
+
     var ACTIONS = {
-        feed: { label: 'Add a line to the Feed' },
-        chatbox: { label: 'Show text in the chatbox' },
-        notify: { label: 'Send a desktop notification' },
-        status: { label: 'Set the plugin status line' },
-        count: { label: 'Add 1 to a counter' },
-        stop: { label: 'Stop here unless a condition holds' },
-        ifElse: { label: 'If … then … else', container: true },
-        repeat: { label: 'Repeat N times', container: true },
-        forEachPlayer: { label: 'For each player here', container: true }
+        feed: { label: 'Add a line to the Feed', category: 'output' },
+        chatbox: { label: 'Show text in the chatbox', category: 'output' },
+        notify: { label: 'Send a desktop notification', category: 'output' },
+        status: { label: 'Set the plugin status line', category: 'output' },
+
+        stop: {
+            label: 'Stop here unless a condition holds',
+            category: 'control'
+        },
+        ifElse: {
+            label: 'If … then … else',
+            category: 'control',
+            container: true
+        },
+        repeat: {
+            label: 'Repeat N times',
+            category: 'control',
+            container: true
+        },
+        forEachPlayer: {
+            label: 'For each player here',
+            category: 'control',
+            container: true
+        },
+        forEachFriend: {
+            label: 'For each friend',
+            category: 'control',
+            container: true
+        },
+        forEachItem: {
+            label: 'For each item in a list',
+            category: 'control',
+            container: true
+        },
+
+        count: { label: 'Add 1 to a counter', category: 'variables' },
+        listAdd: { label: 'Add to a list', category: 'variables' },
+        listClear: { label: 'Empty a list', category: 'variables' },
+
+        groupInvite: { label: 'Invite a user to a group', category: 'vrchat' },
+        apiCall: { label: 'Call the VRChat API', category: 'vrchat' }
     };
 
     /**
@@ -180,7 +224,8 @@
                 vars,
                 counters,
                 settings,
-                (scope && scope.locals) || null
+                (scope && scope.locals) || null,
+                (scope && scope.lists) || null
             );
             if (expression) {
                 out += '${' + expression + '}';
@@ -201,7 +246,20 @@
      * @param {Set<string>|null} settings
      * @returns {string} JS expression, or '' when unrecognised
      */
-    function resolveToken(token, vars, counters, settings, locals) {
+    function resolveToken(token, vars, counters, settings, locals, lists) {
+        if (token.indexOf('list.') === 0) {
+            var listPath = token.slice('list.'.length);
+            var wantsCount = /\.count$/.test(listPath);
+            var listKey = sanitizeKey(
+                wantsCount ? listPath.replace(/\.count$/, '') : listPath
+            );
+            if (lists && !lists.has(listKey)) {
+                return '';
+            }
+            return wantsCount
+                ? 'lists.' + listKey + '.length'
+                : 'lists.' + listKey + ".join(', ')";
+        }
         if (token.indexOf('instance.') === 0) {
             var field = token.slice('instance.'.length);
             if (INSTANCE_FIELDS.indexOf(field) === -1) {
@@ -244,6 +302,29 @@
         var names = [];
         walkActions(project, function (action) {
             if (action.type === 'count') {
+                var key = sanitizeKey(action.name);
+                if (names.indexOf(key) === -1) {
+                    names.push(key);
+                }
+            }
+        });
+        return names;
+    }
+
+    /**
+     * Every list name a project touches, whether written to or looped over.
+     *
+     * @param {object} project
+     * @returns {string[]}
+     */
+    function collectLists(project) {
+        var names = [];
+        walkActions(project, function (action) {
+            if (
+                action.type === 'listAdd' ||
+                action.type === 'listClear' ||
+                action.type === 'forEachItem'
+            ) {
                 var key = sanitizeKey(action.name);
                 if (names.indexOf(key) === -1) {
                     names.push(key);
@@ -396,11 +477,124 @@
                 lines.push(indent + '}');
                 break;
             }
+            case 'listAdd':
+                lines.push(
+                    indent +
+                        'lists.' +
+                        sanitizeKey(action.name) +
+                        '.push(' +
+                        compileText(action.text, vars, scope) +
+                        ');'
+                );
+                break;
+            case 'listClear':
+                lines.push(
+                    indent + 'lists.' + sanitizeKey(action.name) + '.length = 0;'
+                );
+                break;
+            case 'groupInvite':
+                // Errors are logged rather than thrown: one failed invite must
+                // not abort the rest of the stack.
+                lines.push(
+                    indent +
+                        'ctx.inviteToGroup(' +
+                        compileText(action.groupId, vars, scope) +
+                        ', ' +
+                        compileText(action.userId, vars, scope) +
+                        ').catch((err) => ctx.error("group invite failed", err));'
+                );
+                break;
+            case 'apiCall':
+                lines.push(
+                    indent +
+                        'ctx.api(' +
+                        compileText(action.endpoint, vars, scope) +
+                        ', { method: ' +
+                        quote(
+                            ['GET', 'POST', 'PUT', 'DELETE'].indexOf(
+                                action.method
+                            ) !== -1
+                                ? action.method
+                                : 'GET'
+                        ) +
+                        ' }).catch((err) => ctx.error("api call failed", err));'
+                );
+                break;
+            case 'forEachFriend': {
+                var friendVar = 'friend' + indent.length;
+                var friendScope = {
+                    counters: scope.counters,
+                    settings: scope.settings,
+                    lists: scope.lists,
+                    locals: Object.assign({}, scope.locals || {}, {
+                        friend: friendVar + '.displayName',
+                        friendId: friendVar + '.userId',
+                        friendStatus: friendVar + '.status',
+                        friendLocation: friendVar + '.location'
+                    })
+                };
+                var filter = '';
+                if (action.only === 'online') {
+                    filter = '.filter((f) => f.isOnline)';
+                } else if (action.only === 'favorites') {
+                    filter = '.filter((f) => f.isFavorite)';
+                }
+                lines.push(
+                    indent +
+                        'for (const ' +
+                        friendVar +
+                        ' of ctx.friends()' +
+                        filter +
+                        ') {'
+                );
+                lines.push.apply(
+                    lines,
+                    generateActions(
+                        action.children,
+                        vars,
+                        friendScope,
+                        indent + '    '
+                    )
+                );
+                lines.push(indent + '}');
+                break;
+            }
+            case 'forEachItem': {
+                var itemVar = 'item' + indent.length;
+                var itemScope = {
+                    counters: scope.counters,
+                    settings: scope.settings,
+                    lists: scope.lists,
+                    locals: Object.assign({}, scope.locals || {}, {
+                        item: itemVar
+                    })
+                };
+                lines.push(
+                    indent +
+                        'for (const ' +
+                        itemVar +
+                        ' of lists.' +
+                        sanitizeKey(action.name) +
+                        '.slice()) {'
+                );
+                lines.push.apply(
+                    lines,
+                    generateActions(
+                        action.children,
+                        vars,
+                        itemScope,
+                        indent + '    '
+                    )
+                );
+                lines.push(indent + '}');
+                break;
+            }
             case 'forEachPlayer': {
                 var playerVar = 'player' + indent.length;
                 var innerScope = {
                     counters: scope.counters,
                     settings: scope.settings,
+                    lists: scope.lists,
                     locals: Object.assign({}, scope.locals || {}, {
                         player: playerVar
                     })
@@ -477,12 +671,17 @@
      */
     function generateSource(project) {
         var counters = collectCounters(project);
+        var listNames = collectLists(project);
         var settingKeys = new Set(
             (project.settings || []).map(function (field) {
                 return sanitizeKey(field.key);
             })
         );
-        var scope = { counters: new Set(counters), settings: settingKeys };
+        var scope = {
+            counters: new Set(counters),
+            settings: settingKeys,
+            lists: new Set(listNames)
+        };
 
         var lines = [];
         lines.push('/**');
@@ -501,6 +700,17 @@
                     counters
                         .map(function (counterName) {
                             return counterName + ': 0';
+                        })
+                        .join(', ') +
+                    ' };'
+            );
+        }
+        if (listNames.length) {
+            lines.push(
+                '        const lists = { ' +
+                    listNames
+                        .map(function (listName) {
+                            return listName + ': []';
                         })
                         .join(', ') +
                     ' };'
@@ -595,8 +805,10 @@
     root.VrcxPluginCodegen = {
         TRIGGERS: TRIGGERS,
         ACTIONS: ACTIONS,
+        CATEGORIES: CATEGORIES,
         INSTANCE_FIELDS: INSTANCE_FIELDS,
         walkActions: walkActions,
+        collectLists: collectLists,
         escapeTemplate: escapeTemplate,
         sanitizeKey: sanitizeKey,
         compileText: compileText,

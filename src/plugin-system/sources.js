@@ -22,6 +22,8 @@ let stoppers = [];
  * @type {object|null}
  */
 let locationStoreRef = null;
+/** @type {object|null} */
+let friendStoreRef = null;
 let tickHandle = null;
 let tickCount = 0;
 
@@ -48,6 +50,7 @@ export function startPluginSources({
     }
     started = true;
     locationStoreRef = locationStore;
+    friendStoreRef = friendStore;
 
     stoppers.push(
         watch(
@@ -237,6 +240,37 @@ export function getInstanceSnapshot() {
 }
 
 /**
+ * The local user's friends, flattened to plain values.
+ *
+ * Sorted by display name so a plugin looping over them produces stable output
+ * run to run, rather than whatever order the store happens to hold.
+ *
+ * @returns {Array<{userId: string, displayName: string, state: string, status: string, location: string, isOnline: boolean, isFavorite: boolean}>}
+ */
+export function getFriendSnapshot() {
+    const friends = friendStoreRef?.friends;
+    if (!friends?.size) {
+        return [];
+    }
+    const favorites = friendStoreRef?.localFavoriteFriends;
+    const out = [];
+    for (const [userId, friend] of friends) {
+        const state = friend?.state ?? 'offline';
+        out.push({
+            userId,
+            displayName: friend?.name ?? friend?.ref?.displayName ?? '',
+            state,
+            status: friend?.ref?.status ?? '',
+            location: friend?.ref?.location ?? '',
+            isOnline: state !== 'offline',
+            isFavorite: Boolean(favorites?.has?.(userId))
+        });
+    }
+    out.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return out;
+}
+
+/**
  * @param {object} friendStore
  */
 function diffFriendPresence(friendStore) {
@@ -306,6 +340,7 @@ export function stopPluginSources() {
     }
     started = false;
     locationStoreRef = null;
+    friendStoreRef = null;
     if (tickHandle !== null) {
         try {
             workerTimers.clearInterval(tickHandle);

@@ -4,7 +4,11 @@ import * as workerTimers from 'worker-timers';
 import configRepository from '../services/config';
 import { oscService } from '../services/osc';
 import { pluginBus, PluginEvents } from './eventBus';
-import { emptyInstanceSnapshot, getInstanceSnapshot } from './sources';
+import {
+    emptyInstanceSnapshot,
+    getFriendSnapshot,
+    getInstanceSnapshot
+} from './sources';
 import { registerChatboxSource } from './chatbox';
 import { writePluginFeed } from './feed';
 
@@ -26,6 +30,9 @@ import { writePluginFeed } from './feed';
  * @property {(handler: Function, ms: number) => number} timeout
  * @property {(source: *, cb: Function, options?: object) => void} watch
  * @property {(dispose: Function) => void} onDispose
+ * @property {(endpoint: string, options?: {method?: string, params?: object}) => Promise<*>} api
+ * @property {(groupId: string, userId: string) => Promise<*>} inviteToGroup
+ * @property {() => object[]} friends
  * @property {() => object} instance
  * @property {(render: () => (string|null|undefined), options?: {label?: string, order?: number}) => (() => void)} chatbox
  * @property {(handler: (message: {address: string, args: any[]}) => void, config?: {host?: string, sendPort?: number, receivePort?: number}) => Promise<boolean>} oscListen
@@ -44,6 +51,55 @@ import { writePluginFeed } from './feed';
  */
 function storageKey(pluginId, key) {
     return `VRCX_plugin_${pluginId}_${key}`;
+}
+
+/**
+ * Minimum gap between VRChat API calls made by plugins, in milliseconds.
+ *
+ * Plugin code is frequently a loop over a friend list, which without a queue
+ * would fire hundreds of requests as fast as the event loop allows. That trips
+ * VRChat's rate limiter and, for anything invite-shaped, looks exactly like
+ * spam. Every plugin shares this queue so several plugins cannot gang up.
+ */
+const API_MIN_INTERVAL_MS = 1200;
+
+/** @type {Promise<void>} */
+let apiQueue = Promise.resolve();
+let lastApiCallAt = 0;
+
+/**
+ * Serialises an API call behind the shared throttle.
+ *
+ * @param {() => Promise<*>} run
+ * @returns {Promise<*>}
+ */
+function enqueueApiCall(run) {
+    const next = apiQueue.then(async () => {
+        const wait = Math.max(
+            0,
+            API_MIN_INTERVAL_MS - (Date.now() - lastApiCallAt)
+        );
+        if (wait > 0) {
+            await new Promise((resolve) => {
+                workerTimers.setTimeout(resolve, wait);
+            });
+        }
+        lastApiCallAt = Date.now();
+        return run();
+    });
+    // Keep the chain alive after a rejection, or one failed call would wedge
+    // every later call from every plugin.
+    apiQueue = next.then(
+        () => undefined,
+        () => undefined
+    );
+    return next;
+}
+
+/** Test helper. */
+export function resetApiThrottle() {
+    apiQueue = Promise.resolve();
+    lastApiCallAt = 0;
 }
 
 /**
@@ -166,6 +222,72 @@ export function createPluginContext({ id, name, settings, onStatus }) {
         },
 
         onDispose,
+
+        /**
+         * Calls the VRChat API through VRCX's own request layer, so the call
+         * inherits its authentication, error handling and logging.
+         *
+         * Every call goes through a shared throttle — see API_MIN_INTERVAL_MS.
+         * Endpoints are relative, e.g. `groups/grp_x/invites`.
+         *
+         * @param {string} endpoint
+         * @param {{method?: string, params?: object}} [options]
+         * @returns {Promise<*>} the decoded response body
+         */
+        api(endpoint, options = {}) {
+            const path = String(endpoint ?? '')
+                .trim()
+                .replace(/^\/+/, '');
+            if (!path) {
+                return Promise.reject(new Error('api() needs an endpoint'));
+            }
+            const method = String(options.method ?? 'GET').toUpperCase();
+            // Imported lazily: `services/request` pulls in the store and
+            // coordinator graph, which the plugin context must not force to
+            // load just to exist.
+            return enqueueApiCall(async () => {
+                const { request } = await import('../services/request');
+                return request(path, { method, params: options.params ?? {} });
+            });
+        },
+
+        /**
+         * Invites a user to a group.
+         *
+         * Thin wrapper over the API call so the common case does not require
+         * knowing the endpoint shape.
+         *
+         * @param {string} groupId
+         * @param {string} userId
+         * @returns {Promise<*>}
+         */
+        inviteToGroup(groupId, userId) {
+            const group = String(groupId ?? '').trim();
+            const user = String(userId ?? '').trim();
+            if (!group || !user) {
+                return Promise.reject(
+                    new Error('inviteToGroup needs a group id and a user id')
+                );
+            }
+            return context.api(`groups/${group}/invites`, {
+                method: 'POST',
+                params: { userId: user }
+            });
+        },
+
+        /**
+         * The local user's friends, as plain values.
+         *
+         * @returns {Array<{userId: string, displayName: string, state: string, status: string, location: string, isOnline: boolean, isFavorite: boolean}>}
+         */
+        friends() {
+            try {
+                return getFriendSnapshot();
+            } catch (err) {
+                console.error(`[plugin:${id}] friend snapshot failed`, err);
+                return [];
+            }
+        },
 
         /**
          * A snapshot of the instance the local user is in.
