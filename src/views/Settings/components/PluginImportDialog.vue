@@ -12,7 +12,7 @@
                     <div class="flex gap-2">
                         <Input
                             v-model="code"
-                            placeholder="owner/repo"
+                            placeholder="gist link, https bundle link, or owner/repo"
                             :disabled="loading"
                             class="flex-1"
                             @keyup.enter="preview" />

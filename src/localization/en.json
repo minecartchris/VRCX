@@ -1320,7 +1320,7 @@
                 "title": "Import a plugin from GitHub",
                 "description": "Paste a plugin code. VRCX reads vrcx-plugin.json from that repository and shows you the plugin before anything is installed.",
                 "code_label": "Plugin code",
-                "code_hint": "owner/repo, owner/repo{'@'}branch, owner/repo/folder{'@'}tag, or a github.com link.",
+                "code_hint": "A gist link, an https link to a bundle file, or owner/repo{'@'}branch for a repository.",
                 "fetch": "Fetch",
                 "loading": "Fetching…",
                 "review_source": "Review the code that will run",

@@ -381,12 +381,20 @@
                 <div class="panel">
                     <h2>Generated files</h2>
                     <div class="toolbar">
-                        <button class="primary" id="dlBoth">Download both</button>
+                        <button class="primary" id="dlBundle">Download bundle</button>
+                        <button id="copyBundle">Copy bundle</button>
+                        <button id="dlBoth">Download 2 files</button>
                         <button id="copyJs">Copy index.js</button>
-                        <button id="copyJson">Copy manifest</button>
                         <button id="saveProject">Save project</button>
                         <button id="loadProject">Load project</button>
                     </div>
+                    <p class="hint" style="margin-top: -4px">
+                        The <strong>bundle</strong> is one file holding both
+                        halves. Put it in a
+                        <a href="https://gist.github.com" target="_blank" rel="noreferrer">gist</a>
+                        or anywhere with an https link, then paste that link
+                        into VRCX — no repository needed.
+                    </p>
                     <p id="validation"></p>
                     <span class="tag">vrcx-plugin.json</span>
                     <pre id="outJson"></pre>
@@ -424,6 +432,113 @@
                     return 'b' + nextId++;
                 }
 
+                function newClause() {
+                    return {
+                        left: '{{displayName}}',
+                        operator: 'equals',
+                        right: ''
+                    };
+                }
+
+                var OPERATORS = [
+                    { value: 'equals', label: 'is' },
+                    { value: 'notEquals', label: 'is not' },
+                    { value: 'contains', label: 'contains' },
+                    { value: 'notContains', label: 'does not contain' },
+                    { value: 'notEmpty', label: 'is not empty' },
+                    { value: 'isEmpty', label: 'is empty' },
+                    { value: 'greater', label: '>' },
+                    { value: 'less', label: '<' }
+                ];
+
+                /** Operators that compare against nothing. */
+                function isUnary(operator) {
+                    return operator === 'notEmpty' || operator === 'isEmpty';
+                }
+
+                /**
+                 * Condition editor shared by the "if" and "stop" blocks: one
+                 * row per clause, joined by a single and/or for the whole
+                 * group.
+                 */
+                function conditionEditor(action) {
+                    if (!Array.isArray(action.conditions)) {
+                        // Migrate a project saved before and/or existed.
+                        action.conditions = [
+                            {
+                                left: action.left,
+                                operator: action.operator,
+                                right: action.right
+                            }
+                        ];
+                        action.join = 'and';
+                    }
+                    var wrap = el('div');
+                    wrap.style.cssText =
+                        'display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px';
+
+                    action.conditions.forEach(function (clause, index) {
+                        var row = el('div');
+                        row.style.cssText =
+                            'display:flex;gap:4px;align-items:center;flex-wrap:wrap';
+
+                        if (index > 0) {
+                            row.appendChild(
+                                selectInput(
+                                    [
+                                        { value: 'and', label: 'and' },
+                                        { value: 'or', label: 'or' }
+                                    ],
+                                    action.join,
+                                    function (v) {
+                                        action.join = v;
+                                    }
+                                )
+                            );
+                        }
+                        row.appendChild(
+                            textInput(clause.left, function (v) {
+                                clause.left = v;
+                            })
+                        );
+                        row.appendChild(
+                            selectInput(
+                                OPERATORS,
+                                clause.operator,
+                                function (v) {
+                                    clause.operator = v;
+                                }
+                            )
+                        );
+                        if (!isUnary(clause.operator)) {
+                            row.appendChild(
+                                textInput(clause.right, function (v) {
+                                    clause.right = v;
+                                })
+                            );
+                        }
+                        if (action.conditions.length > 1) {
+                            var rm = el('button', 'icon-btn', '−');
+                            rm.title = 'Remove this condition';
+                            rm.addEventListener('click', function () {
+                                action.conditions.splice(index, 1);
+                                render();
+                            });
+                            row.appendChild(rm);
+                        }
+                        wrap.appendChild(row);
+                    });
+
+                    var add = el('button', 'icon-btn', '+ condition');
+                    add.style.alignSelf = 'flex-start';
+                    add.addEventListener('click', function () {
+                        action.conditions.push(newClause());
+                        render();
+                    });
+                    wrap.appendChild(add);
+                    return wrap;
+                }
+
                 /** Default field values per action type. */
                 function newAction(type) {
                     var base = { uid: uid(), type: type };
@@ -440,13 +555,11 @@
                     } else if (type === 'count') {
                         base.name = 'count';
                     } else if (type === 'stop') {
-                        base.left = '{{displayName}}';
-                        base.operator = 'equals';
-                        base.right = '';
+                        base.join = 'and';
+                        base.conditions = [newClause()];
                     } else if (type === 'ifElse') {
-                        base.left = '{{displayName}}';
-                        base.operator = 'equals';
-                        base.right = '';
+                        base.join = 'and';
+                        base.conditions = [newClause()];
                         base.children = [];
                         base.elseChildren = [];
                     } else if (type === 'repeat') {
@@ -714,32 +827,7 @@
                         });
                         head.appendChild(times);
                     } else if (action.type === 'ifElse') {
-                        head.appendChild(
-                            textInput(action.left, function (v) {
-                                action.left = v;
-                            })
-                        );
-                        head.appendChild(
-                            selectInput(
-                                [
-                                    { value: 'equals', label: 'is' },
-                                    { value: 'notEquals', label: 'is not' },
-                                    { value: 'contains', label: 'contains' },
-                                    { value: 'notEmpty', label: 'is not empty' }
-                                ],
-                                action.operator,
-                                function (v) {
-                                    action.operator = v;
-                                }
-                            )
-                        );
-                        if (action.operator !== 'notEmpty') {
-                            head.appendChild(
-                                textInput(action.right, function (v) {
-                                    action.right = v;
-                                })
-                            );
-                        }
+                        head.appendChild(conditionEditor(action));
                     } else if (action.type === 'forEachPlayer') {
                         head.appendChild(el('span', null, '· use {{player}}'));
                     } else if (action.type === 'forEachFriend') {
@@ -938,32 +1026,7 @@
                             )
                         );
                     } else if (action.type === 'stop') {
-                        block.appendChild(
-                            textInput(action.left, function (v) {
-                                action.left = v;
-                            })
-                        );
-                        block.appendChild(
-                            selectInput(
-                                [
-                                    { value: 'equals', label: 'is' },
-                                    { value: 'notEquals', label: 'is not' },
-                                    { value: 'contains', label: 'contains' },
-                                    { value: 'notEmpty', label: 'is not empty' }
-                                ],
-                                action.operator,
-                                function (v) {
-                                    action.operator = v;
-                                }
-                            )
-                        );
-                        if (action.operator !== 'notEmpty') {
-                            block.appendChild(
-                                textInput(action.right, function (v) {
-                                    action.right = v;
-                                })
-                            );
-                        }
+                        block.appendChild(conditionEditor(action));
                     } else {
                         block.appendChild(
                             textInput(action.text, function (v) {
@@ -1249,9 +1312,17 @@
                             copy(lastOutput.source, ev.currentTarget);
                         });
                     document
-                        .getElementById('copyJson')
+                        .getElementById('dlBundle')
+                        .addEventListener('click', function () {
+                            download(
+                                (project.id || 'plugin') + '.vrcx-plugin.json',
+                                lastOutput.bundle
+                            );
+                        });
+                    document
+                        .getElementById('copyBundle')
                         .addEventListener('click', function (ev) {
-                            copy(lastOutput.manifestJson, ev.currentTarget);
+                            copy(lastOutput.bundle, ev.currentTarget);
                         });
                     document
                         .getElementById('saveProject')

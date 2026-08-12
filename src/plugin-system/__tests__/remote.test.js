@@ -4,7 +4,9 @@ import {
     compileRemotePlugin,
     formatPluginCode,
     parsePluginCode,
+    parsePluginSource,
     rawUrlFor,
+    validateBundle,
     validateRemoteManifest
 } from '../remote';
 
@@ -95,6 +97,93 @@ describe('plugin code parsing', () => {
         expect(formatPluginCode(parsePluginCode('someone/repo/sub@v1'))).toBe(
             'someone/repo/sub@v1'
         );
+    });
+});
+
+describe('plugin source detection', () => {
+    test('an owner/repo code is still a repo', () => {
+        expect(parsePluginSource('someone/my-plugin')).toEqual({
+            kind: 'repo',
+            parsed: {
+                owner: 'someone',
+                repo: 'my-plugin',
+                path: '',
+                ref: 'HEAD'
+            }
+        });
+    });
+
+    test('a github.com link is a repo, not a bundle', () => {
+        const source = parsePluginSource(
+            'https://github.com/someone/my-plugin'
+        );
+        expect(source.kind).toBe('repo');
+    });
+
+    test('any other https link is a bundle', () => {
+        expect(
+            parsePluginSource('https://example.com/plugins/clock.json')
+        ).toEqual({
+            kind: 'bundle',
+            url: 'https://example.com/plugins/clock.json'
+        });
+    });
+
+    test('http is refused so the download cannot be tampered with', () => {
+        expect(() => parsePluginSource('http://example.com/p.json')).toThrow(
+            /https/
+        );
+    });
+
+    test('gist forms all resolve to the same id', () => {
+        const expected = { kind: 'gist', id: 'abc123def456' };
+        expect(parsePluginSource('gist:abc123def456')).toEqual(expected);
+        expect(
+            parsePluginSource('https://gist.github.com/someone/abc123def456')
+        ).toEqual(expected);
+        expect(
+            parsePluginSource(
+                'https://gist.github.com/someone/abc123def456#file-x'
+            )
+        ).toEqual(expected);
+    });
+
+    test('a gist id that is not hex is refused', () => {
+        expect(() => parsePluginSource('gist:not a gist')).toThrow(/gist id/);
+    });
+
+    test('an empty input is refused', () => {
+        expect(() => parsePluginSource('   ')).toThrow();
+    });
+});
+
+describe('bundle validation', () => {
+    const good = {
+        vrcxPlugin: 1,
+        manifest: { id: 'bundled', name: 'Bundled' },
+        source: 'module.exports = { setup() {} };'
+    };
+
+    test('accepts a well formed bundle', () => {
+        const { manifest, source } = validateBundle(good);
+        expect(manifest.id).toBe('bundled');
+        expect(source).toContain('setup');
+    });
+
+    test('rejects a bundle with no source', () => {
+        expect(() => validateBundle({ ...good, source: '' })).toThrow(/source/);
+        expect(() => validateBundle({ ...good, source: 42 })).toThrow(/source/);
+    });
+
+    test('rejects a bundle whose manifest is invalid', () => {
+        expect(() =>
+            validateBundle({ ...good, manifest: { id: 'Bad Id', name: 'x' } })
+        ).toThrow(/kebab-case/);
+    });
+
+    test('rejects a non object', () => {
+        expect(() => validateBundle(null)).toThrow();
+        expect(() => validateBundle([])).toThrow();
     });
 });
 

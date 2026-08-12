@@ -650,15 +650,77 @@
      * @returns {string}
      */
     function compileCondition(action, vars, scope) {
-        var left = compileText(action.left, vars, scope);
-        var right = compileText(action.right, vars, scope);
-        switch (action.operator) {
+        var clauses = conditionClauses(action);
+        var join = action.join === 'or' ? ' || ' : ' && ';
+        var compiled = clauses.map(function (clause) {
+            return compileClause(clause, vars, scope);
+        });
+        if (compiled.length === 0) {
+            return 'true';
+        }
+        if (compiled.length === 1) {
+            return compiled[0];
+        }
+        // Parenthesised so mixing this into `if (!(...))` stays correct, and so
+        // a future caller cannot accidentally re-associate the operands.
+        return '(' + compiled.join(join) + ')';
+    }
+
+    /**
+     * Normalises the old single-clause shape and the newer multi-clause one, so
+     * projects saved before AND/OR existed still load.
+     *
+     * @param {object} action
+     * @returns {object[]}
+     */
+    function conditionClauses(action) {
+        if (Array.isArray(action.conditions) && action.conditions.length) {
+            return action.conditions;
+        }
+        if (action.left !== undefined || action.operator !== undefined) {
+            return [
+                {
+                    left: action.left,
+                    operator: action.operator,
+                    right: action.right
+                }
+            ];
+        }
+        return [];
+    }
+
+    /**
+     * @param {object} clause
+     * @param {string[]} vars
+     * @param {object} scope
+     * @returns {string}
+     */
+    function compileClause(clause, vars, scope) {
+        var left = compileText(clause.left, vars, scope);
+        var right = compileText(clause.right, vars, scope);
+        switch (clause.operator) {
             case 'notEquals':
                 return left + ' !== ' + right;
             case 'contains':
-                return left + '.toLowerCase().includes(' + right + '.toLowerCase())';
+                return (
+                    left + '.toLowerCase().includes(' + right + '.toLowerCase())'
+                );
+            case 'notContains':
+                return (
+                    '!' +
+                    left +
+                    '.toLowerCase().includes(' +
+                    right +
+                    '.toLowerCase())'
+                );
             case 'notEmpty':
                 return left + '.trim() !== ""';
+            case 'isEmpty':
+                return left + '.trim() === ""';
+            case 'greater':
+                return 'Number(' + left + ') > Number(' + right + ')';
+            case 'less':
+                return 'Number(' + left + ') < Number(' + right + ')';
             case 'equals':
             default:
                 return left + ' === ' + right;
@@ -790,15 +852,38 @@
     }
 
     /**
+     * A whole plugin as one file, so it can be shared from a gist or any web
+     * host without needing a repository laid out in the folder format.
+     *
      * @param {object} project
-     * @returns {{manifest: object, manifestJson: string, source: string}}
+     * @returns {string} pretty printed bundle JSON
+     */
+    function buildBundle(project) {
+        var manifest = generateManifest(project || {});
+        return (
+            JSON.stringify(
+                {
+                    vrcxPlugin: 1,
+                    manifest: manifest,
+                    source: generateSource(project || {})
+                },
+                null,
+                4
+            ) + '\n'
+        );
+    }
+
+    /**
+     * @param {object} project
+     * @returns {{manifest: object, manifestJson: string, source: string, bundle: string}}
      */
     function generate(project) {
         var manifest = generateManifest(project || {});
         return {
             manifest: manifest,
             manifestJson: JSON.stringify(manifest, null, 4) + '\n',
-            source: generateSource(project || {})
+            source: generateSource(project || {}),
+            bundle: buildBundle(project || {})
         };
     }
 
@@ -809,6 +894,8 @@
         INSTANCE_FIELDS: INSTANCE_FIELDS,
         walkActions: walkActions,
         collectLists: collectLists,
+        conditionClauses: conditionClauses,
+        buildBundle: buildBundle,
         escapeTemplate: escapeTemplate,
         sanitizeKey: sanitizeKey,
         compileText: compileText,

@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
-import { compileRemotePlugin, validateRemoteManifest } from '../remote';
+import {
+    compileRemotePlugin,
+    validateBundle,
+    validateRemoteManifest
+} from '../remote';
 import { buildDefaultSettings } from '../settingsSchema';
 
 /**
@@ -809,6 +813,186 @@ describe('VRChat blocks', () => {
         built.ctx.api = () => Promise.reject(new Error('nope'));
         await built.compiled.setup(built.ctx);
         expect(built.record.status.detail).toBe('still running');
+    });
+});
+
+describe('and / or conditions', () => {
+    /**
+     * @param {object} condition extra fields for the if block
+     */
+    async function runIf(condition, event) {
+        const built = build({
+            id: 'cond',
+            name: 'Cond',
+            stacks: [
+                {
+                    trigger: 'playerJoin',
+                    actions: [
+                        Object.assign(
+                            {
+                                type: 'ifElse',
+                                children: [{ type: 'feed', text: 'yes' }],
+                                elseChildren: [{ type: 'feed', text: 'no' }]
+                            },
+                            condition
+                        )
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        built.record.handlers.get('PLAYER_JOIN')(event);
+        return built.record.feeds.at(-1).message;
+    }
+
+    const AND = {
+        join: 'and',
+        conditions: [
+            { left: '{{displayName}}', operator: 'contains', right: 'a' },
+            { left: '{{userId}}', operator: 'notEmpty' }
+        ]
+    };
+
+    test('and requires every clause', async () => {
+        expect(await runIf(AND, { displayName: 'Alice', userId: 'u' })).toBe(
+            'yes'
+        );
+        expect(await runIf(AND, { displayName: 'Alice', userId: '' })).toBe(
+            'no'
+        );
+        expect(await runIf(AND, { displayName: 'Bob', userId: 'u' })).toBe(
+            'no'
+        );
+    });
+
+    test('or needs only one clause', async () => {
+        const OR = { ...AND, join: 'or' };
+        expect(await runIf(OR, { displayName: 'Bob', userId: 'u' })).toBe(
+            'yes'
+        );
+        expect(await runIf(OR, { displayName: 'Bob', userId: '' })).toBe('no');
+    });
+
+    test('the old single clause shape still works', async () => {
+        expect(
+            await runIf(
+                { left: '{{displayName}}', operator: 'equals', right: 'Alice' },
+                { displayName: 'Alice' }
+            )
+        ).toBe('yes');
+    });
+
+    test('numeric comparisons compare as numbers', async () => {
+        const built = build({
+            id: 'numeric',
+            name: 'Numeric',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'ifElse',
+                            join: 'and',
+                            conditions: [
+                                {
+                                    left: '{{instance.playerCount}}',
+                                    operator: 'greater',
+                                    right: '2'
+                                }
+                            ],
+                            children: [{ type: 'status', text: 'busy' }],
+                            elseChildren: [{ type: 'status', text: 'quiet' }]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        // 3 players, and "10" > "9" must not be compared as strings
+        expect(built.record.status.detail).toBe('busy');
+    });
+
+    test('a clause group is parenthesised so negation stays correct', () => {
+        const { source } = codegen.generate({
+            id: 'negate',
+            name: 'Negate',
+            stacks: [
+                {
+                    trigger: 'playerJoin',
+                    actions: [
+                        {
+                            type: 'stop',
+                            join: 'or',
+                            conditions: [
+                                { left: 'a', operator: 'equals', right: 'b' },
+                                { left: 'c', operator: 'equals', right: 'd' }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+        expect(source).toContain('if (!((`a` === `b` || `c` === `d`)))');
+    });
+
+    test('an empty condition list is treated as true', () => {
+        const { source } = codegen.generate({
+            id: 'empty-cond',
+            name: 'Empty cond',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'ifElse',
+                            conditions: [],
+                            children: [{ type: 'status', text: 'x' }],
+                            elseChildren: []
+                        }
+                    ]
+                }
+            ]
+        });
+        expect(source).toContain('if (true)');
+    });
+});
+
+describe('single file bundle', () => {
+    test('bundles the manifest and source into one file', () => {
+        const { bundle, manifest, source } = codegen.generate({
+            id: 'bundled',
+            name: 'Bundled',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [{ type: 'status', text: 'hi' }]
+                }
+            ]
+        });
+        const parsed = JSON.parse(bundle);
+        expect(parsed.vrcxPlugin).toBe(1);
+        expect(parsed.manifest).toEqual(manifest);
+        expect(parsed.source).toBe(source);
+    });
+
+    test('the bundle passes the importer validator and runs', async () => {
+        const { bundle } = codegen.generate({
+            id: 'bundled-run',
+            name: 'Bundled run',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [{ type: 'status', text: 'from a bundle' }]
+                }
+            ]
+        });
+        const { manifest, source } = validateBundle(JSON.parse(bundle));
+        const compiled = compileRemotePlugin(source, manifest.id);
+        const { ctx, record } = fakeContext(
+            buildDefaultSettings(manifest.settingsSchema)
+        );
+        await compiled.setup(ctx);
+        expect(record.status.detail).toBe('from a bundle');
     });
 });
 

@@ -37,6 +37,99 @@ const CATEGORY_KEYS = new Set(pluginCategories.map((category) => category.key));
  */
 
 /**
+ * Works out what kind of thing the user pasted.
+ *
+ * Three shapes are accepted:
+ *   - a bundle URL: any https link to a single-file plugin bundle
+ *   - a gist: `gist:<id>` or a gist.github.com link
+ *   - a repo folder: the owner/repo form handled by `parsePluginCode`
+ *
+ * The URL and gist forms exist so a one-file plugin can be shared without
+ * laying out a whole repository.
+ *
+ * @param {string} input
+ * @returns {{kind: 'bundle', url: string} | {kind: 'gist', id: string} | {kind: 'repo', parsed: PluginCode}}
+ */
+export function parsePluginSource(input) {
+    const value = String(input ?? '').trim();
+    if (!value) {
+        throw new Error('Enter a plugin code, link or gist');
+    }
+
+    const gistPrefix = value.match(/^gist:(.+)$/i);
+    if (gistPrefix) {
+        return { kind: 'gist', id: gistIdFrom(gistPrefix[1]) };
+    }
+    if (/^https?:\/\/gist\.github\.com\//i.test(value)) {
+        return { kind: 'gist', id: gistIdFrom(value) };
+    }
+
+    if (/^https?:\/\//i.test(value)) {
+        // A github.com repo link is still a repo, not a bundle.
+        if (/^https?:\/\/(www\.)?github\.com\//i.test(value)) {
+            return { kind: 'repo', parsed: parsePluginCode(value) };
+        }
+        let url;
+        try {
+            url = new URL(value);
+        } catch {
+            throw new Error('That does not look like a valid link');
+        }
+        if (url.protocol !== 'https:') {
+            throw new Error(
+                'Only https links are allowed, so the download cannot be tampered with in transit'
+            );
+        }
+        return { kind: 'bundle', url: url.toString() };
+    }
+
+    return { kind: 'repo', parsed: parsePluginCode(value) };
+}
+
+/**
+ * @param {string} value gist id, or a URL containing one
+ * @returns {string}
+ */
+function gistIdFrom(value) {
+    const cleaned = String(value ?? '')
+        .trim()
+        .replace(/^https?:\/\/gist\.github\.com\//i, '')
+        .replace(/[?#].*$/, '')
+        .replace(/\/+$/, '');
+    // Either "<id>" or "<user>/<id>".
+    const parts = cleaned.split('/').filter(Boolean);
+    const id = parts[parts.length - 1] ?? '';
+    if (!/^[0-9a-f]+$/i.test(id)) {
+        throw new Error(`"${id}" is not a gist id`);
+    }
+    return id;
+}
+
+/**
+ * Validates a single-file plugin bundle.
+ *
+ * @param {*} data parsed bundle JSON
+ * @returns {{manifest: object, source: string}}
+ */
+export function validateBundle(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('A plugin bundle must be a JSON object');
+    }
+    if (typeof data.source !== 'string' || !data.source.trim()) {
+        throw new Error('The bundle has no "source"');
+    }
+    if (data.source.length > MAX_SOURCE_BYTES) {
+        throw new Error(
+            `The bundled source is larger than ${MAX_SOURCE_BYTES / 1024}KB`
+        );
+    }
+    return {
+        manifest: validateRemoteManifest(data.manifest),
+        source: data.source
+    };
+}
+
+/**
  * Parses an import code into its parts.
  *
  * @param {string} code
@@ -168,7 +261,120 @@ export function validateRemoteManifest(manifest) {
  * @returns {Promise<{code: string, parsed: PluginCode, manifest: object, source: string, manifestUrl: string, sourceUrl: string}>}
  */
 export async function fetchRemotePlugin(code) {
-    const parsed = parsePluginCode(code);
+    const source = parsePluginSource(code);
+    if (source.kind === 'bundle') {
+        return fetchBundlePlugin(source.url);
+    }
+    if (source.kind === 'gist') {
+        return fetchGistPlugin(source.id);
+    }
+    return fetchRepoPlugin(source.parsed);
+}
+
+/**
+ * A whole plugin from one URL.
+ *
+ * @param {string} url
+ * @returns {Promise<object>}
+ */
+async function fetchBundlePlugin(url) {
+    let raw;
+    try {
+        raw = await getText(url);
+    } catch (err) {
+        throw new Error(`Could not download ${url}. (${err.message})`, {
+            cause: err
+        });
+    }
+    let data;
+    try {
+        data = JSON.parse(raw);
+    } catch {
+        throw new Error(
+            `${url} did not return a plugin bundle. Link directly to the bundle file, not to a web page showing it.`
+        );
+    }
+    const { manifest, source } = validateBundle(data);
+    return {
+        code: url,
+        parsed: null,
+        manifest,
+        source,
+        manifestUrl: url,
+        sourceUrl: url
+    };
+}
+
+/**
+ * A plugin from a gist holding the two files, or a single bundle file.
+ *
+ * @param {string} id
+ * @returns {Promise<object>}
+ */
+async function fetchGistPlugin(id) {
+    const apiUrl = `https://api.github.com/gists/${encodeURIComponent(id)}`;
+    let gist;
+    try {
+        gist = JSON.parse(await getText(apiUrl));
+    } catch (err) {
+        throw new Error(
+            `Could not read gist ${id} — check the id and that the gist is public. (${err.message})`,
+            { cause: err }
+        );
+    }
+    const files = gist?.files;
+    if (!files || typeof files !== 'object') {
+        throw new Error(`Gist ${id} has no files`);
+    }
+
+    // A gist can carry either the two-file layout or a single bundle.
+    const manifestFile = files[MANIFEST_FILE];
+    if (!manifestFile) {
+        const bundleFile = Object.values(files).find(
+            (file) =>
+                typeof file?.content === 'string' &&
+                file.content.includes('"vrcxPlugin"')
+        );
+        if (!bundleFile) {
+            throw new Error(
+                `Gist ${id} needs either a ${MANIFEST_FILE} plus its entry file, or a single bundle file`
+            );
+        }
+        const { manifest, source } = validateBundle(
+            JSON.parse(bundleFile.content)
+        );
+        return {
+            code: `gist:${id}`,
+            parsed: null,
+            manifest,
+            source,
+            manifestUrl: gist.html_url ?? apiUrl,
+            sourceUrl: bundleFile.raw_url ?? apiUrl
+        };
+    }
+
+    const manifest = validateRemoteManifest(JSON.parse(manifestFile.content));
+    const entryFile = files[manifest.entry];
+    if (!entryFile?.content) {
+        throw new Error(
+            `Gist ${id} has no file named "${manifest.entry}", which its ${MANIFEST_FILE} points at`
+        );
+    }
+    return {
+        code: `gist:${id}`,
+        parsed: null,
+        manifest,
+        source: entryFile.content,
+        manifestUrl: gist.html_url ?? apiUrl,
+        sourceUrl: entryFile.raw_url ?? apiUrl
+    };
+}
+
+/**
+ * @param {PluginCode} parsed
+ * @returns {Promise<object>}
+ */
+async function fetchRepoPlugin(parsed) {
     const manifestUrl = rawUrlFor(parsed, MANIFEST_FILE);
 
     let raw;

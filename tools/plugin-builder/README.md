@@ -13,9 +13,35 @@ Keep `codegen.js` next to it.
 2. Drag a **trigger** onto the canvas, or click it.
 3. Drag **actions** into the trigger.
 4. Fill in the text boxes. The generated code updates as you type.
-5. **Download both**, put the two files in a folder in a public GitHub repo.
-6. In VRCX: Settings → Plugins → Import from GitHub, with
-   `owner/repo/folder`.
+5. **Download bundle** — one file holding the manifest and the code.
+6. Put it anywhere with an https link and paste that link into VRCX:
+   Settings → Plugins → Import from GitHub.
+
+## Sharing a plugin
+
+VRCX accepts three forms, so a one-file plugin does not need a repository.
+
+| Paste this | Where it reads from |
+| --- | --- |
+| `https://gist.github.com/you/abc123` or `gist:abc123` | a gist, holding either a bundle file or `vrcx-plugin.json` plus its entry file |
+| any other `https://…` link | a bundle file at that exact URL |
+| `owner/repo`, `owner/repo@tag`, `owner/repo/folder` | the two-file layout in a repository |
+
+A **bundle** is a single JSON file:
+
+```json
+{
+    "vrcxPlugin": 1,
+    "manifest": { "id": "my-plugin", "name": "My plugin", "...": "..." },
+    "source": "module.exports = { setup(ctx) { ... } };"
+}
+```
+
+The link must be to the raw file, not to a page displaying it — a gist's
+"Raw" button gives you the right URL. Only `https` is accepted, so the
+download cannot be altered in transit.
+
+Updating still works for every form: VRCX re-fetches the same link.
 
 **Save project** writes a `.builder.json` you can reload later to keep editing.
 It is not needed to run the plugin — only the two generated files matter.
@@ -62,7 +88,7 @@ that stops the rest of the stack unless it holds.
 
 | Block | What it does |
 | --- | --- |
-| If … then … else | Runs one branch or the other. The else branch is skipped entirely if you leave it empty. |
+| If … then … else | Runs one branch or the other. The else branch is skipped entirely if you leave it empty. Add as many conditions as you like with **+ condition** and join them with a single **and** / **or**. |
 | Repeat N times | Runs its contents N times (1–1000). |
 | For each player here | Once per player in your instance, `{{player}}` set to their name. |
 | For each friend | Once per friend, filterable to online or favourites only. Exposes `{{friend}}`, `{{friendId}}`, `{{friendStatus}}`, `{{friendLocation}}`. |
