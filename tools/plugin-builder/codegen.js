@@ -75,8 +75,34 @@
         notify: { label: 'Send a desktop notification' },
         status: { label: 'Set the plugin status line' },
         count: { label: 'Add 1 to a counter' },
-        stop: { label: 'Stop here unless a condition holds' }
+        stop: { label: 'Stop here unless a condition holds' },
+        ifElse: { label: 'If … then … else', container: true },
+        repeat: { label: 'Repeat N times', container: true },
+        forEachPlayer: { label: 'For each player here', container: true }
     };
+
+    /**
+     * Fields exposed by `ctx.instance()`. Used both to validate
+     * {{instance.x}} placeholders and to populate the palette hint.
+     */
+    var INSTANCE_FIELDS = [
+        'worldName',
+        'worldId',
+        'instanceId',
+        'instanceName',
+        'accessType',
+        'accessTypeName',
+        'region',
+        'ownerId',
+        'groupId',
+        'isGroup',
+        'ageGate',
+        'playerCount',
+        'friendCount',
+        'minutesHere',
+        'inInstance',
+        'location'
+    ];
 
     /**
      * Escapes text for embedding in a JS template literal.
@@ -149,7 +175,13 @@
             }
             out += escapeTemplate(source.slice(index, openAt));
             var token = source.slice(openAt + 2, closeAt).trim();
-            var expression = resolveToken(token, vars, counters, settings);
+            var expression = resolveToken(
+                token,
+                vars,
+                counters,
+                settings,
+                (scope && scope.locals) || null
+            );
             if (expression) {
                 out += '${' + expression + '}';
             } else {
@@ -169,7 +201,19 @@
      * @param {Set<string>|null} settings
      * @returns {string} JS expression, or '' when unrecognised
      */
-    function resolveToken(token, vars, counters, settings) {
+    function resolveToken(token, vars, counters, settings, locals) {
+        if (token.indexOf('instance.') === 0) {
+            var field = token.slice('instance.'.length);
+            if (INSTANCE_FIELDS.indexOf(field) === -1) {
+                return '';
+            }
+            return 'ctx.instance().' + field;
+        }
+        // Loop variables shadow event fields, which is what reads naturally
+        // inside a "for each player" block.
+        if (locals && locals[token]) {
+            return locals[token];
+        }
         if (token.indexOf('setting.') === 0) {
             var settingKey = sanitizeKey(token.slice('setting.'.length));
             if (settings && !settings.has(settingKey)) {
@@ -198,17 +242,38 @@
      */
     function collectCounters(project) {
         var names = [];
-        (project.stacks || []).forEach(function (stack) {
-            (stack.actions || []).forEach(function (action) {
-                if (action.type === 'count') {
-                    var key = sanitizeKey(action.name);
-                    if (names.indexOf(key) === -1) {
-                        names.push(key);
-                    }
+        walkActions(project, function (action) {
+            if (action.type === 'count') {
+                var key = sanitizeKey(action.name);
+                if (names.indexOf(key) === -1) {
+                    names.push(key);
                 }
-            });
+            }
         });
         return names;
+    }
+
+    /**
+     * Visits every action in a project, including those nested inside
+     * container blocks.
+     *
+     * @param {object} project
+     * @param {(action: object) => void} visit
+     */
+    function walkActions(project, visit) {
+        function descend(actions) {
+            (actions || []).forEach(function (action) {
+                if (!action) {
+                    return;
+                }
+                visit(action);
+                descend(action.children);
+                descend(action.elseChildren);
+            });
+        }
+        (project.stacks || []).forEach(function (stack) {
+            descend(stack.actions);
+        });
     }
 
     /**
@@ -289,9 +354,96 @@
             case 'stop':
                 lines.push(indent + 'if (!(' + compileCondition(action, vars, scope) + ')) { return; }');
                 break;
+            case 'ifElse': {
+                lines.push(indent + 'if (' + compileCondition(action, vars, scope) + ') {');
+                lines.push.apply(
+                    lines,
+                    generateActions(action.children, vars, scope, indent + '    ')
+                );
+                var elseBody = generateActions(
+                    action.elseChildren,
+                    vars,
+                    scope,
+                    indent + '    '
+                );
+                if (elseBody.length) {
+                    lines.push(indent + '} else {');
+                    lines.push.apply(lines, elseBody);
+                }
+                lines.push(indent + '}');
+                break;
+            }
+            case 'repeat': {
+                var times = Math.max(1, Math.min(1000, Number(action.times) || 1));
+                // `i` is suffixed by depth so nested repeats do not collide.
+                var counterVar = 'i' + indent.length;
+                lines.push(
+                    indent +
+                        'for (let ' +
+                        counterVar +
+                        ' = 0; ' +
+                        counterVar +
+                        ' < ' +
+                        times +
+                        '; ' +
+                        counterVar +
+                        ' += 1) {'
+                );
+                lines.push.apply(
+                    lines,
+                    generateActions(action.children, vars, scope, indent + '    ')
+                );
+                lines.push(indent + '}');
+                break;
+            }
+            case 'forEachPlayer': {
+                var playerVar = 'player' + indent.length;
+                var innerScope = {
+                    counters: scope.counters,
+                    settings: scope.settings,
+                    locals: Object.assign({}, scope.locals || {}, {
+                        player: playerVar
+                    })
+                };
+                lines.push(
+                    indent +
+                        'for (const ' +
+                        playerVar +
+                        ' of ctx.instance().players) {'
+                );
+                lines.push.apply(
+                    lines,
+                    generateActions(
+                        action.children,
+                        vars,
+                        innerScope,
+                        indent + '    '
+                    )
+                );
+                lines.push(indent + '}');
+                break;
+            }
             default:
                 break;
         }
+        return lines;
+    }
+
+    /**
+     * @param {object[]} actions
+     * @param {string[]} vars
+     * @param {object} scope
+     * @param {string} indent
+     * @returns {string[]}
+     */
+    function generateActions(actions, vars, scope, indent) {
+        var lines = [];
+        (actions || []).forEach(function (action) {
+            if (!action || !ACTIONS[action.type] || action.type === 'chatbox') {
+                return;
+            }
+            lines.push.apply(lines, generateAction(action, vars, scope, indent));
+        });
         return lines;
     }
 
@@ -364,48 +516,42 @@
                 return;
             }
             var vars = trigger.vars || [];
-            var actions = (stack.actions || []).filter(function (action) {
-                return ACTIONS[action.type];
-            });
 
             // The chatbox is a pull source rather than an action, so those
-            // blocks are hoisted out of the trigger and registered once.
-            actions
-                .filter(function (action) {
-                    return action.type === 'chatbox';
-                })
-                .forEach(function (action) {
+            // blocks are hoisted out of the trigger and registered once. They
+            // are collected from anywhere in the stack, including inside
+            // container blocks, since nesting one has no runtime meaning.
+            walkActions({ stacks: [stack] }, function (action) {
+                if (action.type === 'chatbox') {
                     chatboxStacks.push({ action: action, vars: [] });
-                });
-
-            var runnable = actions.filter(function (action) {
-                return action.type !== 'chatbox';
+                }
             });
+
+            var runnable = generateActions(
+                stack.actions,
+                vars,
+                scope,
+                stack.trigger === 'start' ? '        ' : '            '
+            );
             if (runnable.length === 0) {
                 return;
             }
 
             if (stack.trigger === 'start') {
-                runnable.forEach(function (action) {
-                    body.push.apply(body, generateAction(action, vars, scope, '        '));
-                });
+                body.push.apply(body, runnable);
                 return;
             }
 
             if (stack.trigger === 'interval') {
                 var seconds = Math.max(1, Number(stack.seconds) || 60);
                 body.push('        ctx.interval(() => {');
-                runnable.forEach(function (action) {
-                    body.push.apply(body, generateAction(action, vars, scope, '            '));
-                });
+                body.push.apply(body, runnable);
                 body.push('        }, ' + seconds * 1000 + ');');
                 return;
             }
 
             body.push('        ctx.on(ctx.events.' + trigger.event + ', (e) => {');
-            runnable.forEach(function (action) {
-                body.push.apply(body, generateAction(action, vars, scope, '            '));
-            });
+            body.push.apply(body, runnable);
             body.push('        });');
         });
 
@@ -449,6 +595,8 @@
     root.VrcxPluginCodegen = {
         TRIGGERS: TRIGGERS,
         ACTIONS: ACTIONS,
+        INSTANCE_FIELDS: INSTANCE_FIELDS,
+        walkActions: walkActions,
         escapeTemplate: escapeTemplate,
         sanitizeKey: sanitizeKey,
         compileText: compileText,

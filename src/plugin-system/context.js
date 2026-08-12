@@ -4,6 +4,7 @@ import * as workerTimers from 'worker-timers';
 import configRepository from '../services/config';
 import { oscService } from '../services/osc';
 import { pluginBus, PluginEvents } from './eventBus';
+import { emptyInstanceSnapshot, getInstanceSnapshot } from './sources';
 import { registerChatboxSource } from './chatbox';
 import { writePluginFeed } from './feed';
 
@@ -25,6 +26,7 @@ import { writePluginFeed } from './feed';
  * @property {(handler: Function, ms: number) => number} timeout
  * @property {(source: *, cb: Function, options?: object) => void} watch
  * @property {(dispose: Function) => void} onDispose
+ * @property {() => object} instance
  * @property {(render: () => (string|null|undefined), options?: {label?: string, order?: number}) => (() => void)} chatbox
  * @property {(handler: (message: {address: string, args: any[]}) => void, config?: {host?: string, sendPort?: number, receivePort?: number}) => Promise<boolean>} oscListen
  * @property {(message: string, options?: {detail?: string, level?: string, userId?: string, displayName?: string}) => Promise<object|null>} feed
@@ -164,6 +166,23 @@ export function createPluginContext({ id, name, settings, onStatus }) {
         },
 
         onDispose,
+
+        /**
+         * A snapshot of the instance the local user is in.
+         *
+         * Read fresh on every call, so a plugin holding onto the result gets a
+         * point-in-time value rather than a live view of the store.
+         *
+         * @returns {ReturnType<typeof getInstanceSnapshot>}
+         */
+        instance() {
+            try {
+                return getInstanceSnapshot();
+            } catch (err) {
+                console.error(`[plugin:${id}] instance snapshot failed`, err);
+                return emptyInstanceSnapshot();
+            }
+        },
 
         /**
          * Contributes a line to the OSC chatbox.

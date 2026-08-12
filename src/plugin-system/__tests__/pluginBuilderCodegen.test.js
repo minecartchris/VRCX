@@ -34,7 +34,19 @@ function fakeContext(settings) {
         intervals: [],
         chatbox: [],
         feeds: [],
-        status: null
+        status: null,
+        instance: {
+            inInstance: true,
+            worldName: 'The Great Pug',
+            ownerId: 'usr_owner',
+            accessTypeName: 'Friends',
+            region: 'use',
+            playerCount: 3,
+            friendCount: 1,
+            minutesHere: 12,
+            isGroup: false,
+            players: ['Alice', 'Bob', 'Carol']
+        }
     };
     return {
         record,
@@ -63,6 +75,7 @@ function fakeContext(settings) {
                 record.feeds.push({ message, options });
                 return Promise.resolve(null);
             },
+            instance: () => record.instance,
             log: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
@@ -215,6 +228,250 @@ describe('builder output survives the import pipeline', () => {
         expect(built.record.feeds).toHaveLength(0);
         handler({ displayName: 'Alice', userId: 'u2' });
         expect(built.record.feeds).toHaveLength(1);
+    });
+});
+
+describe('instance placeholders', () => {
+    test('reads fields off ctx.instance()', async () => {
+        const built = build({
+            id: 'instance-reader',
+            name: 'Instance reader',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'status',
+                            text: '{{instance.worldName}} [{{instance.accessTypeName}}] {{instance.playerCount}} here, owner {{instance.ownerId}}'
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe(
+            'The Great Pug [Friends] 3 here, owner usr_owner'
+        );
+    });
+
+    test('an unknown instance field stays literal', async () => {
+        const built = build({
+            id: 'bad-field',
+            name: 'Bad field',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        { type: 'status', text: 'x {{instance.secretKey}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('x {{instance.secretKey}}');
+    });
+
+    test('instance fields work inside a chatbox block', async () => {
+        const built = build({
+            id: 'inst-chatbox',
+            name: 'Inst chatbox',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'chatbox',
+                            text: '{{instance.playerCount}} in {{instance.worldName}}'
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.chatbox[0].render()).toBe('3 in The Great Pug');
+    });
+});
+
+describe('control flow blocks', () => {
+    test('if / else picks the right branch', async () => {
+        const project = {
+            id: 'branching',
+            name: 'Branching',
+            stacks: [
+                {
+                    trigger: 'playerJoin',
+                    actions: [
+                        {
+                            type: 'ifElse',
+                            left: '{{displayName}}',
+                            operator: 'equals',
+                            right: 'Alice',
+                            children: [{ type: 'feed', text: 'hello Alice' }],
+                            elseChildren: [
+                                { type: 'feed', text: 'hello stranger' }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+        const built = build(project);
+        await built.compiled.setup(built.ctx);
+        const fire = built.record.handlers.get('PLAYER_JOIN');
+        fire({ displayName: 'Alice', userId: 'u1' });
+        fire({ displayName: 'Bob', userId: 'u2' });
+        expect(built.record.feeds.map((f) => f.message)).toEqual([
+            'hello Alice',
+            'hello stranger'
+        ]);
+    });
+
+    test('an if with no else emits no else branch', async () => {
+        const built = build({
+            id: 'no-else',
+            name: 'No else',
+            stacks: [
+                {
+                    trigger: 'playerJoin',
+                    actions: [
+                        {
+                            type: 'ifElse',
+                            left: '{{displayName}}',
+                            operator: 'contains',
+                            right: 'ali',
+                            children: [{ type: 'feed', text: 'matched' }],
+                            elseChildren: []
+                        }
+                    ]
+                }
+            ]
+        });
+        expect(built.source).not.toContain('} else {');
+        await built.compiled.setup(built.ctx);
+        built.record.handlers.get('PLAYER_JOIN')({ displayName: 'Alice' });
+        expect(built.record.feeds).toHaveLength(1);
+    });
+
+    test('repeat runs its body N times', async () => {
+        const built = build({
+            id: 'repeater',
+            name: 'Repeater',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'repeat',
+                            times: 3,
+                            children: [{ type: 'count', name: 'n' }]
+                        },
+                        { type: 'status', text: 'ran {{counter.n}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.status.detail).toBe('ran 3');
+    });
+
+    test('for each player iterates the instance roster', async () => {
+        const built = build({
+            id: 'roster',
+            name: 'Roster',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'forEachPlayer',
+                            children: [{ type: 'feed', text: 'saw {{player}}' }]
+                        }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        expect(built.record.feeds.map((f) => f.message)).toEqual([
+            'saw Alice',
+            'saw Bob',
+            'saw Carol'
+        ]);
+    });
+
+    test('nested containers do not collide on loop variables', async () => {
+        const built = build({
+            id: 'nested',
+            name: 'Nested',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'repeat',
+                            times: 2,
+                            children: [
+                                {
+                                    type: 'forEachPlayer',
+                                    children: [
+                                        {
+                                            type: 'repeat',
+                                            times: 2,
+                                            children: [
+                                                { type: 'count', name: 'hits' }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        { type: 'status', text: '{{counter.hits}}' }
+                    ]
+                }
+            ]
+        });
+        await built.compiled.setup(built.ctx);
+        // 2 outer x 3 players x 2 inner
+        expect(built.record.status.detail).toBe('12');
+    });
+
+    test('counters nested inside containers are still declared', () => {
+        const { source } = codegen.generate({
+            id: 'deep-counter',
+            name: 'Deep counter',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [
+                        {
+                            type: 'ifElse',
+                            left: 'a',
+                            operator: 'equals',
+                            right: 'a',
+                            children: [{ type: 'count', name: 'deep' }],
+                            elseChildren: []
+                        }
+                    ]
+                }
+            ]
+        });
+        expect(source).toContain('const counters = { deep: 0 }');
+    });
+
+    test('an empty container produces no dead code', () => {
+        const { source } = codegen.generate({
+            id: 'empty-container',
+            name: 'Empty container',
+            stacks: [
+                {
+                    trigger: 'start',
+                    actions: [{ type: 'repeat', times: 5, children: [] }]
+                }
+            ]
+        });
+        // The loop is still emitted but must be syntactically valid.
+        expect(() =>
+            compileRemotePlugin(source, 'empty-container')
+        ).not.toThrow();
     });
 });
 

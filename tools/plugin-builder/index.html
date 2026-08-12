@@ -291,10 +291,17 @@
                     <p class="hint">Drag onto the canvas to start a stack.</p>
                     <div id="paletteTriggers"></div>
                 </div>
-                <div class="panel">
+                <div class="panel" style="margin-bottom: 14px">
                     <h2>Actions</h2>
                     <p class="hint">Drag into a trigger.</p>
                     <div id="paletteActions"></div>
+                </div>
+                <div class="panel">
+                    <h2>Instance</h2>
+                    <p class="hint">
+                        Usable in any text box, in any block.
+                    </p>
+                    <div id="instanceFields" style="display: flex; flex-wrap: wrap; gap: 4px"></div>
                 </div>
             </div>
 
@@ -415,6 +422,17 @@
                         base.left = '{{displayName}}';
                         base.operator = 'equals';
                         base.right = '';
+                    } else if (type === 'ifElse') {
+                        base.left = '{{displayName}}';
+                        base.operator = 'equals';
+                        base.right = '';
+                        base.children = [];
+                        base.elseChildren = [];
+                    } else if (type === 'repeat') {
+                        base.times = 3;
+                        base.children = [];
+                    } else if (type === 'forEachPlayer') {
+                        base.children = [];
                     }
                     return base;
                 }
@@ -466,6 +484,20 @@
                     });
                 }
 
+                function buildInstanceHints() {
+                    var host = document.getElementById('instanceFields');
+                    CG.INSTANCE_FIELDS.forEach(function (field) {
+                        var token = '{{instance.' + field + '}}';
+                        var chip = el('button', 'tag', field);
+                        chip.title = 'Click to copy ' + token;
+                        chip.style.cursor = 'pointer';
+                        chip.addEventListener('click', function () {
+                            copy(token, chip);
+                        });
+                        host.appendChild(chip);
+                    });
+                }
+
                 function addTrigger(key) {
                     project.stacks.push({
                         uid: uid(),
@@ -512,7 +544,131 @@
                     return sel;
                 }
 
-                function renderAction(stack, action) {
+                /**
+                 * A drop target bound to a specific list of actions, so
+                 * container blocks can nest.
+                 */
+                function makeDropZone(list, emptyLabel) {
+                    var zone = el('div', 'drop-zone');
+                    if (list.length === 0) {
+                        zone.appendChild(el('span', 'hint', emptyLabel));
+                    }
+                    list.forEach(function (child) {
+                        zone.appendChild(renderAction(list, child));
+                    });
+                    zone.addEventListener('dragover', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        zone.classList.add('over');
+                    });
+                    zone.addEventListener('dragleave', function (ev) {
+                        ev.stopPropagation();
+                        zone.classList.remove('over');
+                    });
+                    zone.addEventListener('drop', function (ev) {
+                        ev.preventDefault();
+                        // Without this the parent zone would also receive the
+                        // drop and add the block twice.
+                        ev.stopPropagation();
+                        zone.classList.remove('over');
+                        var payload = parseDrag(ev);
+                        if (payload && payload.kind === 'action') {
+                            list.push(newAction(payload.key));
+                            render();
+                        }
+                    });
+                    return zone;
+                }
+
+                function renderContainer(list, action) {
+                    var wrap = el('div', 'stack');
+                    wrap.style.margin = '0';
+                    var head = el('div', 'stack-head');
+                    head.style.background = 'var(--flow)';
+                    head.appendChild(
+                        el('strong', null, CG.ACTIONS[action.type].label)
+                    );
+
+                    if (action.type === 'repeat') {
+                        var times = document.createElement('input');
+                        times.type = 'number';
+                        times.min = '1';
+                        times.max = '1000';
+                        times.value = action.times;
+                        times.style.maxWidth = '80px';
+                        times.addEventListener('input', function () {
+                            action.times = Number(times.value) || 1;
+                            refreshOutput();
+                        });
+                        head.appendChild(times);
+                    } else if (action.type === 'ifElse') {
+                        head.appendChild(
+                            textInput(action.left, function (v) {
+                                action.left = v;
+                            })
+                        );
+                        head.appendChild(
+                            selectInput(
+                                [
+                                    { value: 'equals', label: 'is' },
+                                    { value: 'notEquals', label: 'is not' },
+                                    { value: 'contains', label: 'contains' },
+                                    { value: 'notEmpty', label: 'is not empty' }
+                                ],
+                                action.operator,
+                                function (v) {
+                                    action.operator = v;
+                                }
+                            )
+                        );
+                        if (action.operator !== 'notEmpty') {
+                            head.appendChild(
+                                textInput(action.right, function (v) {
+                                    action.right = v;
+                                })
+                            );
+                        }
+                    } else if (action.type === 'forEachPlayer') {
+                        head.appendChild(el('span', null, '· use {{player}}'));
+                    }
+
+                    var del = el('button', 'icon-btn', '✕');
+                    del.style.marginLeft = 'auto';
+                    del.addEventListener('click', function () {
+                        var i = list.indexOf(action);
+                        if (i !== -1) list.splice(i, 1);
+                        render();
+                    });
+                    head.appendChild(del);
+                    wrap.appendChild(head);
+
+                    wrap.appendChild(
+                        makeDropZone(action.children, 'Drop actions here')
+                    );
+
+                    if (action.type === 'ifElse') {
+                        var elseLabel = el('div', null, 'else');
+                        elseLabel.style.cssText =
+                            'padding:4px 10px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)';
+                        wrap.appendChild(elseLabel);
+                        wrap.appendChild(
+                            makeDropZone(
+                                action.elseChildren,
+                                'Drop actions for the else branch'
+                            )
+                        );
+                    }
+                    return wrap;
+                }
+
+                /**
+                 * @param {object[]} list the array holding this action
+                 * @param {object} action
+                 */
+                function renderAction(list, action) {
+                    if (CG.ACTIONS[action.type].container) {
+                        return renderContainer(list, action);
+                    }
                     var block = el(
                         'div',
                         'block' + (action.type === 'stop' ? ' flow' : '')
@@ -603,9 +759,8 @@
                     var del = el('button', 'icon-btn', '✕');
                     del.title = 'Remove block';
                     del.addEventListener('click', function () {
-                        stack.actions = stack.actions.filter(function (a) {
-                            return a.uid !== action.uid;
-                        });
+                        var i = list.indexOf(action);
+                        if (i !== -1) list.splice(i, 1);
                         render();
                     });
                     block.appendChild(del);
@@ -658,34 +813,9 @@
                     head.appendChild(del);
                     wrap.appendChild(head);
 
-                    var zone = el('div', 'drop-zone');
-                    if (stack.actions.length === 0) {
-                        zone.appendChild(
-                            el('span', 'hint', 'Drop actions here')
-                        );
-                    }
-                    stack.actions.forEach(function (action) {
-                        zone.appendChild(renderAction(stack, action));
-                    });
-
-                    zone.addEventListener('dragover', function (ev) {
-                        ev.preventDefault();
-                        zone.classList.add('over');
-                    });
-                    zone.addEventListener('dragleave', function () {
-                        zone.classList.remove('over');
-                    });
-                    zone.addEventListener('drop', function (ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        zone.classList.remove('over');
-                        var payload = parseDrag(ev);
-                        if (payload && payload.kind === 'action') {
-                            stack.actions.push(newAction(payload.key));
-                            render();
-                        }
-                    });
-                    wrap.appendChild(zone);
+                    wrap.appendChild(
+                        makeDropZone(stack.actions, 'Drop actions here')
+                    );
                     return wrap;
                 }
 
@@ -848,6 +978,7 @@
                 // ---------- wiring ----------
                 function init() {
                     buildPalette();
+                    buildInstanceHints();
 
                     ['pName', 'pId', 'pDesc', 'pVersion'].forEach(function (id) {
                         document

@@ -29,6 +29,20 @@ Any text box accepts `{{...}}` placeholders:
 | `{{displayName}}`, `{{userId}}`, … | a field of the event that fired |
 | `{{setting.key}}` | a plugin setting you defined |
 | `{{counter.name}}` | a counter |
+| `{{instance.worldName}}`, … | the instance you are in (see below) |
+| `{{player}}` | the current player, inside a "for each player" block |
+
+### Instance fields
+
+Available in any text box, in any block. Click a chip in the Instance panel to
+copy the placeholder.
+
+`worldName` `worldId` `instanceId` `instanceName` `accessType`
+`accessTypeName` `region` `ownerId` `groupId` `isGroup` `ageGate`
+`playerCount` `friendCount` `minutesHere` `inInstance` `location`
+
+`ownerId` is whoever opened the instance — for a group instance it falls back
+to the group id. It is empty in a public instance, which has no owner.
 
 Each trigger lists the fields it provides in its header. A placeholder the
 current trigger does not provide is left as literal text rather than producing
@@ -43,6 +57,17 @@ N seconds.
 **Actions** — add a line to the Feed, show text in the chatbox, desktop
 notification, set the status line, increment a counter, and a condition block
 that stops the rest of the stack unless it holds.
+
+**Control flow** — these hold other blocks; drop actions inside them.
+
+| Block | What it does |
+| --- | --- |
+| If … then … else | Runs one branch or the other. The else branch is skipped entirely if you leave it empty. |
+| Repeat N times | Runs its contents N times (1–1000). |
+| For each player here | Runs its contents once per player in your instance, with `{{player}}` set to their name. |
+
+They nest freely. Loop variables are suffixed by depth, so a repeat inside a
+repeat does not clobber the outer counter.
 
 A chatbox block is hoisted out of its trigger and registered once as a chatbox
 source, because the chatbox is polled rather than pushed. It only appears in

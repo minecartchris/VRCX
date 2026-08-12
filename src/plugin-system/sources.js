@@ -1,6 +1,7 @@
 import { watch } from 'vue';
 import * as workerTimers from 'worker-timers';
 
+import { parseLocation } from '../shared/utils/locationParser';
 import { watchState } from '../services/watchState';
 import { pluginBus, PluginEvents } from './eventBus';
 
@@ -14,6 +15,13 @@ import { pluginBus, PluginEvents } from './eventBus';
 let started = false;
 /** @type {Function[]} */
 let stoppers = [];
+/**
+ * Held so `getInstanceSnapshot` can read live values without every caller
+ * having to resolve the store graph.
+ *
+ * @type {object|null}
+ */
+let locationStoreRef = null;
 let tickHandle = null;
 let tickCount = 0;
 
@@ -39,6 +47,7 @@ export function startPluginSources({
         return;
     }
     started = true;
+    locationStoreRef = locationStore;
 
     stoppers.push(
         watch(
@@ -147,6 +156,87 @@ export function startPluginSources({
 }
 
 /**
+ * The shape `getInstanceSnapshot` returns when nothing is known yet. Shared so
+ * callers always see the same fields whether or not the user is in a world.
+ *
+ * @returns {{inInstance: boolean, worldName: string, worldId: string, instanceId: string, instanceName: string, accessType: string, accessTypeName: string, region: string, ownerId: string, groupId: string, isGroup: boolean, ageGate: boolean, playerCount: number, friendCount: number, minutesHere: number, players: string[], location: string}}
+ */
+export function emptyInstanceSnapshot() {
+    return {
+        inInstance: false,
+        worldName: '',
+        worldId: '',
+        instanceId: '',
+        instanceName: '',
+        accessType: '',
+        accessTypeName: '',
+        region: '',
+        ownerId: '',
+        groupId: '',
+        isGroup: false,
+        ageGate: false,
+        playerCount: 0,
+        friendCount: 0,
+        minutesHere: 0,
+        players: [],
+        location: ''
+    };
+}
+
+/**
+ * Fields a plugin can read about the instance the local user is in.
+ *
+ * Built on demand from the live store rather than cached, so a plugin never
+ * reads a stale head count. Everything is a plain value, so an imported plugin
+ * cannot reach back into the store graph through it.
+ *
+ * @returns {ReturnType<typeof emptyInstanceSnapshot>}
+ */
+export function getInstanceSnapshot() {
+    const empty = emptyInstanceSnapshot();
+    const last = locationStoreRef?.lastLocation;
+    if (!last?.location) {
+        return empty;
+    }
+
+    let parsed;
+    try {
+        parsed = parseLocation(last.location);
+    } catch {
+        return { ...empty, location: last.location };
+    }
+
+    const players = last.playerList ? Array.from(last.playerList.values()) : [];
+
+    return {
+        inInstance: true,
+        worldName: last.name ?? '',
+        worldId: parsed.worldId ?? '',
+        instanceId: parsed.instanceId ?? '',
+        instanceName: parsed.instanceName ?? '',
+        accessType: parsed.accessType ?? '',
+        accessTypeName: parsed.accessTypeName ?? '',
+        region: parsed.region ?? '',
+        // For anything other than a public instance this is whoever opened it.
+        ownerId: parsed.userId ?? parsed.groupId ?? '',
+        groupId: parsed.groupId ?? '',
+        isGroup: Boolean(parsed.groupId),
+        ageGate: Boolean(parsed.ageGate),
+        playerCount: last.playerList?.size ?? 0,
+        friendCount: last.friendList?.size ?? 0,
+        minutesHere: last.date
+            ? Math.max(0, Math.floor((Date.now() - last.date) / 60000))
+            : 0,
+        players: players
+            .map((entry) =>
+                typeof entry === 'string' ? entry : (entry?.displayName ?? '')
+            )
+            .filter(Boolean),
+        location: last.location
+    };
+}
+
+/**
  * @param {object} friendStore
  */
 function diffFriendPresence(friendStore) {
@@ -215,6 +305,7 @@ export function stopPluginSources() {
         return;
     }
     started = false;
+    locationStoreRef = null;
     if (tickHandle !== null) {
         try {
             workerTimers.clearInterval(tickHandle);

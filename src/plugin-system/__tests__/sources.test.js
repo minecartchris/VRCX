@@ -9,7 +9,12 @@ vi.mock('worker-timers', () => ({
 }));
 
 const { pluginBus, PluginEvents } = await import('../eventBus');
-const { startPluginSources, stopPluginSources } = await import('../sources');
+const {
+    emptyInstanceSnapshot,
+    getInstanceSnapshot,
+    startPluginSources,
+    stopPluginSources
+} = await import('../sources');
 
 /**
  * Minimal stand-ins for the stores `startPluginSources` observes.
@@ -99,6 +104,46 @@ describe('plugin sources', () => {
         await nextTick();
 
         expect(handler).not.toHaveBeenCalled();
+    });
+
+    test('the instance snapshot reflects the live location store', () => {
+        stores.locationStore.lastLocation = {
+            location: 'wrld_abc:12345~friends(usr_owner)~region(use)',
+            name: 'The Great Pug',
+            date: Date.now() - 5 * 60000,
+            playerList: new Map([
+                ['usr_1', { displayName: 'Alice' }],
+                ['usr_2', { displayName: 'Bob' }]
+            ]),
+            friendList: new Map([['usr_1', {}]])
+        };
+
+        const snapshot = getInstanceSnapshot();
+        expect(snapshot.inInstance).toBe(true);
+        expect(snapshot.worldName).toBe('The Great Pug');
+        expect(snapshot.worldId).toBe('wrld_abc');
+        expect(snapshot.ownerId).toBe('usr_owner');
+        expect(snapshot.region).toBe('use');
+        expect(snapshot.playerCount).toBe(2);
+        expect(snapshot.friendCount).toBe(1);
+        expect(snapshot.players).toEqual(['Alice', 'Bob']);
+        expect(snapshot.minutesHere).toBe(5);
+    });
+
+    test('the snapshot is empty when not in a world', () => {
+        stores.locationStore.lastLocation = { location: '', name: '' };
+        expect(getInstanceSnapshot()).toEqual(emptyInstanceSnapshot());
+    });
+
+    test('the snapshot has the same shape in both states', () => {
+        stores.locationStore.lastLocation = {
+            location: 'wrld_abc:1~region(eu)',
+            name: 'W',
+            playerList: new Map()
+        };
+        expect(Object.keys(getInstanceSnapshot()).sort()).toEqual(
+            Object.keys(emptyInstanceSnapshot()).sort()
+        );
     });
 
     test('every game log entry still reaches the generic gameLog event', async () => {
