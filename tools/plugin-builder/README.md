@@ -43,6 +43,27 @@ download cannot be altered in transit.
 
 Updating still works for every form: VRCX re-fetches the same link.
 
+## One-click install links
+
+Paste your published link into **Install link** and you get a `vrcx://`
+link that opens the plugin directly in VRCX:
+
+```
+vrcx://import-plugin/https%3A%2F%2Fgist.github.com%2Fyou%2Fabc123
+```
+
+Clicking it launches VRCX (or focuses the running copy), opens the import
+dialog, and fetches the plugin so its source is on screen.
+
+**It does not install anything.** The dialog still shows you the code and
+waits for you to press Install. That is deliberate: an install link is
+something people paste into chat, and a link that silently installed code
+would hand any stranger full access to your machine and your VRChat
+account. Read what you are about to run.
+
+The link needs VRCX's `vrcx://` protocol handler, which the installer
+registers. A portable copy that was never installed will not have it.
+
 **Save project** writes a `.builder.json` you can reload later to keep editing.
 It is not needed to run the plugin — only the two generated files matter.
 

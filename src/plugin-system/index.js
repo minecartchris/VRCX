@@ -48,6 +48,7 @@ export async function teardownPluginSystem() {
 export * from './chatbox';
 export * from './eventBus';
 export * from './external';
+export * from './importLink';
 export * from './remote';
 export * from './manager';
 export * from './registry';

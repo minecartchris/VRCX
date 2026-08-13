@@ -15,13 +15,14 @@
             <DatabaseUpgradeDialog></DatabaseUpgradeDialog>
 
             <VRCXUpdateDialog></VRCXUpdateDialog>
+            <PluginImportDialog v-model:open="pluginImportOpen" :initial-code="pluginImportCode" />
         </div>
         <div id="x-dialog-portal" class="x-dialog-portal"></div>
     </TooltipProvider>
 </template>
 
 <script setup>
-    import { computed, onBeforeMount, onMounted } from 'vue';
+    import { computed, onBeforeMount, onMounted, ref, watch } from 'vue';
 
     import { addGameLogEvent, getGameLogTable } from './coordinators/gameLogCoordinator';
     import {
@@ -33,13 +34,14 @@
     import { TooltipProvider } from './components/ui/tooltip';
     import { createGlobalStores } from './stores';
     import { initNoty } from './plugins/noty';
-    import { initPluginSystem } from './plugin-system';
+    import { initPluginSystem, pendingImport } from './plugin-system';
 
     import AlertDialogModal from './components/ui/alert-dialog/AlertDialogModal.vue';
     import DatabaseUpgradeDialog from './components/dialogs/DatabaseUpgradeDialog.vue';
     import MacOSTitleBar from './components/MacOSTitleBar.vue';
     import OtpDialogModal from './components/ui/dialog/OtpDialogModal.vue';
     import PromptDialogModal from './components/ui/dialog/PromptDialogModal.vue';
+    import PluginImportDialog from './views/Settings/components/PluginImportDialog.vue';
     import VRCXUpdateDialog from './components/dialogs/VRCXUpdateDialog.vue';
 
     import '@/styles/globals.css';
@@ -47,6 +49,19 @@
     console.log(`isLinux: ${LINUX}`);
 
     const isMacOS = computed(() => navigator.platform.includes('Mac'));
+
+    // The import dialog lives here rather than in the Plugins tab so a
+    // vrcx://import-plugin link works whichever view is open.
+    const pluginImportOpen = ref(false);
+    const pluginImportCode = ref('');
+
+    watch(pendingImport, (request) => {
+        if (!request) {
+            return;
+        }
+        pluginImportCode.value = request.code;
+        pluginImportOpen.value = true;
+    });
 
     const theme = computed(() => {
         return store.appearanceSettings.isDarkMode ? 'dark' : 'light';

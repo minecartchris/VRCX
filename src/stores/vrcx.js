@@ -16,6 +16,8 @@ import { database } from '../services/database';
 import { refreshCustomScript } from '../shared/utils/base/ui';
 import { useAdvancedSettingsStore } from './settings/advanced';
 import { useAvatarProviderStore } from './avatarProvider';
+import { parsePluginImportCommand } from '../plugin-system/importLink';
+import { requestPluginImport } from '../plugin-system/external';
 import {
     addLocalWorldFavorite,
     addLocalAvatarFavorite
@@ -672,6 +674,17 @@ export const useVrcxStore = defineStore('Vrcx', () => {
                     input.replace('addavatardb/', '')
                 );
                 break;
+            case 'import-plugin': {
+                // Only opens the dialog. Installing stays a deliberate click,
+                // so following a link cannot run someone else's code.
+                const pluginCode = parsePluginImportCommand(input);
+                if (!pluginCode) {
+                    toast.error('That plugin link has nothing to import');
+                    break;
+                }
+                requestPluginImport(pluginCode);
+                break;
+            }
             case 'switchavatar':
                 const avatarId = commandArg;
                 const regexAvatarId =

@@ -7,7 +7,7 @@
                     {{ t('view.plugins.osc_unavailable') }}
                 </p>
             </div>
-            <Button size="sm" variant="outline" class="shrink-0 gap-1.5" @click="importOpen = true">
+            <Button size="sm" variant="outline" class="shrink-0 gap-1.5" @click="requestPluginImport('')">
                 <i class="ri-github-line" />
                 {{ t('view.plugins.import.button') }}
             </Button>
@@ -76,7 +76,6 @@
         </SettingsGroup>
 
         <PluginSettingsDialog v-model:open="dialogOpen" :plugin="selectedPlugin" :settings="selectedSettings" />
-        <PluginImportDialog v-model:open="importOpen" />
     </div>
 </template>
 
@@ -87,7 +86,6 @@
     import { Badge } from '@/components/ui/badge';
     import { Button } from '@/components/ui/button';
     import { Switch } from '@/components/ui/switch';
-    import PluginImportDialog from '../PluginImportDialog.vue';
     import PluginSettingsDialog from '../PluginSettingsDialog.vue';
     import SettingsGroup from '../SettingsGroup.vue';
     import {
@@ -96,6 +94,7 @@
         getPlugin,
         pluginCategories,
         pluginState,
+        requestPluginImport,
         setPluginEnabled,
         uninstallExternalPlugin,
         updateExternalPlugin
@@ -106,7 +105,6 @@
     const { t, te } = useI18n();
 
     const dialogOpen = ref(false);
-    const importOpen = ref(false);
     const selectedPlugin = ref(null);
 
     const oscSupported = oscService.isSupported;

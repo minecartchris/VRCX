@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
+import { parsePluginImportCommand, pluginImportLink } from '../importLink';
 import {
     compileRemotePlugin,
     formatPluginCode,
@@ -97,6 +98,63 @@ describe('plugin code parsing', () => {
         expect(formatPluginCode(parsePluginCode('someone/repo/sub@v1'))).toBe(
             'someone/repo/sub@v1'
         );
+    });
+});
+
+describe('vrcx://import-plugin links', () => {
+    test('a link round trips back to the code', () => {
+        for (const code of [
+            'https://gist.github.com/someone/abc123',
+            'https://example.com/a b/plugin.json?v=1#x',
+            'someone/repo/plugins/clock@main',
+            'gist:abc123'
+        ]) {
+            const link = pluginImportLink(code);
+            expect(link.startsWith('vrcx://import-plugin/')).toBe(true);
+            expect(parsePluginImportCommand(link.replace('vrcx://', ''))).toBe(
+                code
+            );
+        }
+    });
+
+    test('slashes in the payload survive, since it is usually a URL', () => {
+        const code = 'https://example.com/deep/path/plugin.json';
+        expect(
+            parsePluginImportCommand(
+                pluginImportLink(code).replace('vrcx://', '')
+            )
+        ).toBe(code);
+    });
+
+    test('an unencoded payload is still accepted', () => {
+        expect(
+            parsePluginImportCommand('import-plugin/https://example.com/p.json')
+        ).toBe('https://example.com/p.json');
+    });
+
+    test('other commands and empty payloads yield nothing', () => {
+        expect(parsePluginImportCommand('world/wrld_1')).toBe('');
+        expect(parsePluginImportCommand('import-plugin/')).toBe('');
+        expect(parsePluginImportCommand('import-plugin/   ')).toBe('');
+        expect(parsePluginImportCommand('')).toBe('');
+        expect(parsePluginImportCommand(null)).toBe('');
+    });
+
+    test('a malformed percent escape does not throw', () => {
+        expect(() =>
+            parsePluginImportCommand('import-plugin/%E0%A4%A')
+        ).not.toThrow();
+        expect(parsePluginImportCommand('import-plugin/%E0%A4%A')).toBe(
+            '%E0%A4%A'
+        );
+    });
+
+    test('a link only ever yields a code, never an install', () => {
+        // The parser hands back a string. Nothing here can install anything —
+        // that is the whole point of keeping the confirm step.
+        expect(
+            typeof parsePluginImportCommand('import-plugin/gist%3Aabc123')
+        ).toBe('string');
     });
 });
 

@@ -6,7 +6,7 @@
  * on the user's machine — updating is an explicit action.
  */
 
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
 
 import configRepository from '../services/config';
 import { disablePlugin, pluginState } from './manager';
@@ -37,6 +37,32 @@ export const externalPlugins = reactive([]);
  * @type {Record<string, string>}
  */
 export const externalPluginErrors = reactive({});
+
+/**
+ * A pending "open the import dialog with this filled in" request.
+ *
+ * Set by the `vrcx://import-plugin/...` protocol handler and by the Plugins
+ * tab button. Deliberately only opens the dialog: a link must never install
+ * anything on its own, or clicking one in a chat window would run a stranger's
+ * code with full access to the account. The review and confirm step stays.
+ *
+ * @type {import('vue').Ref<{code: string, token: number} | null>}
+ */
+export const pendingImport = ref(null);
+
+let importToken = 0;
+
+/**
+ * Asks the UI to open the import dialog.
+ *
+ * @param {string} [code] prefilled link, gist or owner/repo
+ */
+export function requestPluginImport(code = '') {
+    importToken += 1;
+    // The token makes two requests for the same code distinguishable, so the
+    // dialog reopens rather than the watcher seeing an unchanged value.
+    pendingImport.value = { code: String(code ?? ''), token: importToken };
+}
 
 /**
  * @returns {Promise<void>}

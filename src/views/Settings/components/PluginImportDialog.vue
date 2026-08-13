@@ -90,7 +90,8 @@
     import { installExternalPlugin, previewExternalPlugin } from '@/plugin-system';
 
     const props = defineProps({
-        open: { type: Boolean, default: false }
+        open: { type: Boolean, default: false },
+        initialCode: { type: String, default: '' }
     });
     const emit = defineEmits(['update:open']);
 
@@ -112,10 +113,16 @@
     watch(
         () => props.open,
         (open) => {
-            if (open) {
-                code.value = '';
-                fetched.value = null;
-                error.value = '';
+            if (!open) {
+                return;
+            }
+            code.value = props.initialCode ?? '';
+            fetched.value = null;
+            error.value = '';
+            // Opened from a link: fetch straight away so the source is on
+            // screen to review. Installing still needs a click.
+            if (code.value) {
+                preview();
             }
         }
     );

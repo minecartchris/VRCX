@@ -395,6 +395,22 @@
                         or anywhere with an https link, then paste that link
                         into VRCX — no repository needed.
                     </p>
+
+                    <div style="border-top: 1px solid var(--line); margin: 10px 0; padding-top: 10px">
+                        <label class="text-sm" style="font-weight: 500">Install link</label>
+                        <p class="hint" style="margin: 2px 0 6px">
+                            Paste the published link to your bundle or gist to
+                            get a one-click link that opens it in VRCX.
+                        </p>
+                        <div class="row">
+                            <input
+                                id="publishedUrl"
+                                placeholder="https://gist.github.com/you/abc123"
+                                style="flex: 1" />
+                            <button id="copyInstallLink">Copy install link</button>
+                        </div>
+                        <pre id="installLink" style="max-height: 80px"></pre>
+                    </div>
                     <p id="validation"></p>
                     <span class="tag">vrcx-plugin.json</span>
                     <pre id="outJson"></pre>
@@ -1323,6 +1339,27 @@
                         .getElementById('copyBundle')
                         .addEventListener('click', function (ev) {
                             copy(lastOutput.bundle, ev.currentTarget);
+                        });
+
+                    var publishedUrl = document.getElementById('publishedUrl');
+                    var installLink = document.getElementById('installLink');
+                    function refreshInstallLink() {
+                        var value = publishedUrl.value.trim();
+                        installLink.textContent = value
+                            ? 'vrcx://import-plugin/' +
+                              encodeURIComponent(value)
+                            : '';
+                    }
+                    publishedUrl.addEventListener('input', refreshInstallLink);
+                    document
+                        .getElementById('copyInstallLink')
+                        .addEventListener('click', function (ev) {
+                            refreshInstallLink();
+                            if (!installLink.textContent) {
+                                alert('Paste the published link first.');
+                                return;
+                            }
+                            copy(installLink.textContent, ev.currentTarget);
                         });
                     document
                         .getElementById('saveProject')
