@@ -6,36 +6,34 @@
                 side="top"
                 :content="t('dialog.user.actions.favorites_tooltip')">
                 <Button
-                    class="rounded-full"
+                    class="rounded-lg border-muted-foreground/30!"
                     :style="{
                         color:
-                            userDialog.theme.iconColor === 'var(--muted-foreground)'
+                            userDialog.theme.buttonColor === 'var(--primary)'
                                 ? 'var(--background)'
-                                : userDialog.theme.iconColor,
+                                : invertHexColor(userDialog.theme.buttonColor),
                         backgroundColor: userDialog.theme.buttonColor
                     }"
-                    size="icon-lg"
+                    size="icon"
                     @click="userDialogCommand('Add Favorite')"
                     :ariaLabel="t('dialog.user.actions.favorites_tooltip')"
                     ><Star
-                        class="[filter:drop-shadow(0_0_1px_rgba(255,255,255,0.95))_drop-shadow(0_0_1px_rgba(0,0,0,0.95))]"
                 /></Button>
             </TooltipWrapper>
             <TooltipWrapper v-else side="top" :content="t('dialog.user.actions.favorites_tooltip')">
                 <Button
-                    class="rounded-full"
+                    class="rounded-lg border-muted-foreground/30!"
                     :style="{
                         color:
                             userDialog.theme.iconColor === 'var(--muted-foreground)'
                                 ? 'var(--foreground)'
                                 : userDialog.theme.iconColor
                     }"
-                    size="icon-lg"
+                    size="icon"
                     variant="outline"
                     @click="userDialogCommand('Add Favorite')"
                     :ariaLabel="t('dialog.user.actions.favorites_tooltip')"
                     ><Star
-                        class="[filter:drop-shadow(0_0_1px_rgba(255,255,255,0.95))_drop-shadow(0_0_1px_rgba(0,0,0,0.95))]"
                 /></Button>
             </TooltipWrapper>
         </template>
@@ -44,12 +42,17 @@
                 <div class="ml-2">
                     <Button
                         :variant="hasRisk ? 'destructive' : 'outline'"
-                        size="icon-lg"
-                        class="rounded-full"
-                        :style="{ color: userDialog.theme.iconColor }"
+                        size="icon"
+                        class="rounded-lg border-muted-foreground/30!"
+                        :style="{
+                            color:
+                                userDialog.theme.iconColor === 'var(--muted-foreground)'
+                                    ? 'var(--foreground)'
+                                    : userDialog.theme.iconColor
+                        }"
                         :class="{ 'dot-indicator': hasRequest }"
                         :ariaLabel="t('nav_tooltip.manage')">
-                        <MoreHorizontal class="[filter:drop-shadow(0_0_1px_rgba(0,0,0,0.95))]" />
+                        <MoreHorizontal />
                     </Button>
                 </div>
             </DropdownMenuTrigger>
@@ -126,7 +129,7 @@
                             </DropdownMenuItem>
                         </template>
                         <DropdownMenuItem :disabled="!currentUser.isBoopingEnabled" @click="onCommand('Send Boop')">
-                            <MousePointer class="size-4" />
+                            <Hand class="size-4" />
                             {{ t('dialog.user.actions.send_boop') }}
                         </DropdownMenuItem>
                     </template>
@@ -216,7 +219,7 @@
                                 v-if="userDialog.isInteractOff"
                                 variant="destructive"
                                 @click="onCommand('Moderation Enable Avatar Interaction')">
-                                <MousePointer class="size-4" />
+                                <Hand class="size-4" />
                                 {{ t('dialog.user.actions.moderation_enable_avatar_interaction') }}
                             </DropdownMenuItem>
                             <DropdownMenuItem v-else @click="onCommand('Moderation Disable Avatar Interaction')">
@@ -284,7 +287,7 @@
         MessageSquare,
         Mic,
         MoreHorizontal,
-        MousePointer,
+        Hand,
         Pencil,
         Plus,
         RefreshCw,
@@ -316,6 +319,7 @@
     import { useGameStore, useLocationStore, useUserStore } from '../../../stores';
     import { useInviteChecks } from '../../../composables/useInviteChecks';
     import { isActionRecent } from '../../../composables/useRecentActions';
+    import { invertHexColor } from '@/shared/utils';
 
     const props = defineProps({
         userDialogCommand: {

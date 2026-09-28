@@ -1,23 +1,19 @@
 // API functions
-export type GetGroup = (params: {
-    groupId: string;
-    includeRoles?: boolean;
-}) => Promise<{
+export type GetGroup = (params: { groupId: string; includeRoles?: boolean }) => Promise<{
     json: GetGroupResponse;
     params: { groupId: string; includeRoles?: boolean };
 }>;
 
-export type GetCalendars = (params: {
-    date: string;
-}) => Promise<CalendarResponse>;
+export type CheckTransferGroup = (params: { groupId: string; transferTargetId: string }) => Promise<{
+    json: CheckTransferGroupResponse;
+    params: { groupId: string; transferTargetId: string };
+}>;
 
-export type GetFollowingCalendars = (params: {
-    date: string;
-}) => Promise<CalendarResponse>;
+export type GetCalendars = (params: { date: string }) => Promise<CalendarResponse>;
 
-export type GetFeaturedCalendars = (params: {
-    date: string;
-}) => Promise<CalendarResponse>;
+export type GetFollowingCalendars = (params: { date: string }) => Promise<CalendarResponse>;
+
+export type GetFeaturedCalendars = (params: { date: string }) => Promise<CalendarResponse>;
 
 // API response types
 interface GetGroupResponse {
@@ -46,6 +42,16 @@ interface GetGroupResponse {
     rules: string;
     shortCode: string;
     tags: string[];
+}
+
+interface CheckTransferGroupResponse {
+    requirements: {
+        groupNotMonetized: boolean;
+        hasVRCPlus: boolean;
+        hasVerifiedEmail: boolean;
+        targetCanOwnMoreGroups: boolean;
+        targetIsGroupMember: boolean;
+    };
 }
 
 // Exported interfaces

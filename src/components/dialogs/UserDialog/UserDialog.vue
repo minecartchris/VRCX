@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-1 min-h-0 min-w-0 flex flex-row">
+    <div class="user-dialog-scrollbars flex-1 min-h-0 min-w-0 flex flex-row">
         <DialogHeader class="sr-only">
             <DialogTitle>{{
                 userDialog.ref?.displayName || userDialog.id || t('dialog.user.info.header')
@@ -7,7 +7,7 @@
             <DialogDescription>{{ getUserStateText(userDialog.ref || {}) }}</DialogDescription>
         </DialogHeader>
 
-        <div class="flex-none w-80 overflow-y-auto">
+        <div class="flex-none w-77 overflow-y-auto">
             <UserSummaryHeader
                 :get-user-state-text="getUserStateText"
                 :copy-user-display-name="copyUserDisplayName"
@@ -20,7 +20,7 @@
             <TabsUnderline
                 v-model="userDialog.activeTab"
                 :items="userDialogTabs"
-                :tab-color="userDialogTabColor"
+                :activeColor="userDialogTabColor"
                 :unmount-on-hide="false"
                 fill
                 :background="true"
@@ -55,9 +55,9 @@
 
                 <template #JSON>
                     <DialogJsonTab
-                        class="rounded-xl bg-muted/80 p-2"
+                        class="rounded-xl bg-(--profile-card) p-2"
                         :tree-data="treeData"
-                        :tree-data-key="treeData?.id"
+                        :tree-data-key="treeData?.user?.id"
                         :dialog-id="userDialog.id"
                         :dialog-ref="userDialog.ref"
                         @refresh="refreshUserDialogTreeData()" />
@@ -167,6 +167,12 @@
         }
         return color;
     });
+    const scrollbarThumbColor = computed(() => {
+        const color = userDialog.value.theme?.buttonColor;
+        return color === 'var(--primary)'
+            ? 'color-mix(in oklab, var(--foreground) 30%, transparent)'
+            : `color-mix(in oklab, ${color} 50%, transparent)`;
+    });
     const { cachedUsers, showSendBoopDialog, showEditProfileDialog } = useUserStore();
     const { showFavoriteDialog } = useFavoriteStore();
     const { showModerateGroupDialog } = useGroupStore();
@@ -233,7 +239,6 @@
     const treeData = ref({});
 
     /**
-     *
      * @param user
      */
     function getUserStateText(user) {
@@ -252,7 +257,6 @@
     }
 
     /**
-     *
      * @param status
      */
     function getUserStatusText(status) {
@@ -271,23 +275,23 @@
         return t('dialog.user.status.offline');
     }
 
-    /**
-     *
-     */
     function refreshUserDialogTreeData() {
         const D = userDialog.value;
         if (D.id === currentUser.value.id) {
-            treeData.value = formatJsonVars({
-                ...currentUser.value,
-                ...D.ref
-            });
+            treeData.value = {
+                currentUser: formatJsonVars(currentUser.value),
+                user: formatJsonVars(D.ref),
+                profile: formatJsonVars(D.publicProfileRef)
+            };
             return;
         }
-        treeData.value = formatJsonVars(D.ref);
+        treeData.value = {
+            user: formatJsonVars(D.ref),
+            profile: formatJsonVars(D.publicProfileRef)
+        };
     }
 
     /**
-     *
      * @param tabName
      */
     function handleUserDialogTab(tabName) {
@@ -338,16 +342,12 @@
         }
     }
 
-    /**
-     *
-     */
     function loadLastActiveTab() {
         const tab = userDialog.value.lastActiveTab;
         handleUserDialogTab(tab);
     }
 
     /**
-     *
      * @param tabName
      */
     function userDialogTabClick(tabName) {
@@ -362,11 +362,11 @@
 
     // Register simple dialog openers as callbacks for the command composable
     registerCallbacks({
-        showEditProfileDialog
+        showEditProfileDialog,
+        showEditNoteAndMemoDialog: () => infoTabRef.value?.showEditNoteAndMemoDialog()
     });
 
     /**
-     *
      * @param badge
      */
     async function toggleBadgeVisibility(badge) {
@@ -382,7 +382,6 @@
     }
 
     /**
-     *
      * @param badge
      */
     async function toggleBadgeShowcased(badge) {
@@ -398,7 +397,6 @@
     }
 
     /**
-     *
      * @param args
      */
     function handleBadgeUpdate(args) {
@@ -408,17 +406,24 @@
     }
 
     /**
-     *
      * @param displayName
      */
     function copyUserDisplayName(displayName) {
         copyToClipboard(displayName, 'User DisplayName copied to clipboard');
     }
 
-    /**
-     *
-     */
     function closeInviteDialog() {
         clearInviteImageUpload();
     }
 </script>
+
+<style scoped>
+    .user-dialog-scrollbars {
+        --user-dialog-scrollbar-thumb: v-bind(scrollbarThumbColor);
+        --user-dialog-scrollbar-track: transparent;
+    }
+
+    .user-dialog-scrollbars :deep(*) {
+        scrollbar-color: var(--user-dialog-scrollbar-thumb) var(--user-dialog-scrollbar-track);
+    }
+</style>

@@ -5,7 +5,8 @@
                 <DialogTitle>{{ t('dialog.user.actions.edit_profile') }}</DialogTitle>
             </DialogHeader>
 
-            <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-2 space-y-6">
+            <div
+                class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-2 space-y-4 [&>section]:rounded-lg [&>section]:border [&>section]:border-border [&>section]:bg-muted/20 [&>section]:p-4">
                 <section class="space-y-3">
                     <h3 class="text-sm font-semibold">{{ t('dialog.social_status.header') }}</h3>
 
@@ -101,12 +102,12 @@
 
                     <div class="flex items-center gap-2">
                         <img
-                            :src="editProfileDialog.userIcon || currentUser.currentAvatarThumbnailImageUrl"
+                            :src="editProfileDialog.iconUrl || currentUser.currentAvatarThumbnailImageUrl"
                             class="inline-block h-16 aspect-square rounded-md object-cover"
                             :alt="t('dialog.edit_profile.icon')"
                             loading="lazy" />
                         <Button
-                            v-if="editProfileDialog.userIcon"
+                            v-if="editProfileDialog.iconUrl !== currentUser.currentAvatarThumbnailImageUrl"
                             size="sm"
                             variant="outline"
                             :disabled="editProfileDialog.loading"
@@ -143,16 +144,11 @@
                         </SelectContent>
                     </Select>
 
-                    <div v-if="selectedBannerType === 'color'" class="flex items-center gap-1">
-                        <input
-                            type="color"
-                            class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                            :value="bannerColorValue"
+                    <div v-if="selectedBannerType === 'color'" class="flex items-center gap-2">
+                        <ColorPickerButton
+                            :model-value="bannerColorValue"
                             :disabled="editProfileDialog.loading"
-                            @input="handleBannerColorInput" />
-                        <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                            {{ bannerColorValue }}
-                        </span>
+                            @update:model-value="handleBannerColorInput" />
                     </div>
                     <div v-else-if="selectedBannerType === 'avatarBanner'">
                         <img
@@ -171,223 +167,6 @@
                                 {{ t('dialog.invite_message.select_image') }}
                             </Button>
                         </div>
-                    </div>
-                </section>
-
-                <section class="space-y-3">
-                    <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.profile_theme') }}</h3>
-                    <div class="flex items-center gap-2">
-                        <Select
-                            :model-value="editProfileDialog.themeId"
-                            :disabled="editProfileDialog.loading"
-                            @update:modelValue="handleThemeChange">
-                            <SelectTrigger size="sm" class="w-42">
-                                <SelectValue :placeholder="t('dialog.edit_profile.theme_name_placeholder')">
-                                    {{ editProfileDialog.themeName }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem
-                                        v-for="option in editProfileDialog.themes"
-                                        :key="option.id"
-                                        :value="option.id"
-                                        :text-value="option.name">
-                                        <div class="flex w-full items-center justify-between gap-3">
-                                            <span class="inline-flex shrink-0 items-center gap-1">
-                                                <span
-                                                    class="size-3 rounded-sm border"
-                                                    :style="{ backgroundColor: getThemeHexColor(option.buttonColor) }"
-                                                    title="Button color"></span>
-                                                <span
-                                                    class="size-3 rounded-sm border"
-                                                    :style="{ backgroundColor: getThemeHexColor(option.iconColor) }"
-                                                    title="Icon color"></span>
-                                                <span
-                                                    class="size-3 rounded-sm border"
-                                                    :style="{ backgroundColor: getThemeHexColor(option.subtextColor) }"
-                                                    title="Subtext color"></span>
-                                            </span>
-                                            <span class="truncate">{{ option.name }}</span>
-                                        </div>
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            :disabled="editProfileDialog.loading"
-                            @click="handleCreateNewTheme">
-                            {{ t('dialog.edit_profile.create_theme') }}
-                        </Button>
-
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            :disabled="editProfileDialog.loading || !editProfileDialog.themeId"
-                            @click="deleteTheme">
-                            {{ t('dialog.edit_profile.delete_theme') }}
-                        </Button>
-                    </div>
-
-                    <InputGroupField
-                        class="min-w-0 flex-1 mb-1"
-                        v-model="editProfileDialog.themeName"
-                        @input="handleThemeInput"
-                        :maxlength="12"
-                        :placeholder="t('dialog.edit_profile.theme_name_placeholder')">
-                    </InputGroupField>
-                    <div class="grid gap-2 sm:grid-cols-3">
-                        <label class="space-y-1">
-                            <span class="text-xs text-muted-foreground">Button</span>
-                            <div class="flex items-center gap-1">
-                                <input
-                                    type="color"
-                                    class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                                    :value="themeButtonColorValue"
-                                    :disabled="editProfileDialog.loading"
-                                    @input="handleThemeButtonColorInput" />
-                                <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                                    {{ themeButtonColorValue }}
-                                </span>
-                            </div>
-                        </label>
-
-                        <label class="space-y-1">
-                            <span class="text-xs text-muted-foreground">Icon</span>
-                            <div class="flex items-center gap-1">
-                                <input
-                                    type="color"
-                                    class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                                    :value="themeIconColorValue"
-                                    :disabled="editProfileDialog.loading"
-                                    @input="handleThemeIconColorInput" />
-                                <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                                    {{ themeIconColorValue }}
-                                </span>
-                            </div>
-                        </label>
-
-                        <label class="space-y-1">
-                            <span class="text-xs text-muted-foreground">Subtext</span>
-                            <div class="flex items-center gap-1">
-                                <input
-                                    type="color"
-                                    class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                                    :value="themeSubtextColorValue"
-                                    :disabled="editProfileDialog.loading"
-                                    @input="handleThemeSubtextColorInput" />
-                                <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                                    {{ themeSubtextColorValue }}
-                                </span>
-                            </div>
-                        </label>
-                    </div>
-                </section>
-
-                <section class="space-y-3">
-                    <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.profile_background') }}</h3>
-                    <div class="flex items-center gap-2">
-                        <Select
-                            :model-value="props.editProfileDialog.backgroundType"
-                            :disabled="editProfileDialog.loading"
-                            @update:modelValue="handleProfileBackgroundTypeChange">
-                            <SelectTrigger size="sm" class="w-42">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem
-                                        v-for="option in profileBackgroundTypeOptions"
-                                        :key="option.value"
-                                        :value="option.value"
-                                        :text-value="option.label">
-                                        {{ option.label }}
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div v-if="editProfileDialog.backgroundType === 'gradient'" class="grid gap-2 sm:grid-cols-3">
-                        <label class="space-y-1">
-                            <span class="text-xs text-muted-foreground">{{
-                                t('dialog.edit_profile.gradient_top')
-                            }}</span>
-                            <div class="flex items-center gap-1">
-                                <input
-                                    type="color"
-                                    class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                                    :value="backgroundGradientTopColorValue"
-                                    :disabled="editProfileDialog.loading"
-                                    @input="handleBackgroundGradientTopColorInput" />
-                                <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                                    {{ backgroundGradientTopColorValue }}
-                                </span>
-                            </div>
-                        </label>
-
-                        <label class="space-y-1">
-                            <span class="text-xs text-muted-foreground">{{
-                                t('dialog.edit_profile.gradient_bottom')
-                            }}</span>
-                            <div class="flex items-center gap-1">
-                                <input
-                                    type="color"
-                                    class="h-8 w-12 cursor-pointer appearance-none rounded-md border-0 bg-transparent p-0 disabled:cursor-not-allowed [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0"
-                                    :value="backgroundGradientBottomColorValue"
-                                    :disabled="editProfileDialog.loading"
-                                    @input="handleBackgroundGradientBottomColorInput" />
-                                <span class="w-20 text-xs font-mono text-muted-foreground uppercase">
-                                    {{ backgroundGradientBottomColorValue }}
-                                </span>
-                            </div>
-                        </label>
-                    </div>
-
-                    <div v-if="editProfileDialog.backgroundType === 'texture'" class="space-y-2">
-                        <Select
-                            :model-value="props.editProfileDialog.backgroundTextureId"
-                            :disabled="editProfileDialog.loading"
-                            @update:modelValue="handleBackgroundTextureChange">
-                            <SelectTrigger size="sm" class="h-14! w-80">
-                                <SelectValue :placeholder="t('dialog.edit_profile.profile_background_type_image')">
-                                    <template v-if="selectedProfileBackgroundTextureOption">
-                                        <span class="inline-flex min-w-0 items-center gap-2">
-                                            <img
-                                                :src="selectedProfileBackgroundTextureOption.thumbnail"
-                                                class="h-9 w-16 shrink-0 rounded-sm object-cover"
-                                                :alt="selectedProfileBackgroundTextureOption.label"
-                                                loading="lazy" />
-                                            <span class="truncate">{{
-                                                selectedProfileBackgroundTextureOption.label
-                                            }}</span>
-                                        </span>
-                                    </template>
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent class="w-80">
-                                <SelectGroup>
-                                    <SelectItem
-                                        v-for="option in profileBackgrounds"
-                                        :key="option.id"
-                                        :value="option.id"
-                                        :text-value="option.label"
-                                        :disabled="!isLocalUserVrcPlusSupporter && option.isVRCPlus">
-                                        <div class="flex items-center gap-2">
-                                            <img
-                                                :src="option.thumbnail"
-                                                class="h-9 w-16 shrink-0 rounded-sm object-cover"
-                                                :alt="option.label"
-                                                loading="lazy" />
-                                            <span>{{ option.label }}</span>
-                                        </div>
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
                     </div>
                 </section>
 
@@ -497,6 +276,392 @@
                         </SelectContent>
                     </Select>
                 </section>
+
+                <section class="space-y-3">
+                    <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.profile_theme') }}</h3>
+                    <div class="flex items-center gap-2">
+                        <Select
+                            :model-value="editProfileDialog.themeId"
+                            :disabled="editProfileDialog.loading"
+                            @update:modelValue="handleThemeChange">
+                            <SelectTrigger size="sm" class="w-42">
+                                <SelectValue :placeholder="t('dialog.edit_profile.theme_name_placeholder')">
+                                    {{ editProfileDialog.themeName }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem
+                                        v-for="option in editProfileDialog.themes"
+                                        :key="option.id"
+                                        :value="option.id"
+                                        :text-value="option.name">
+                                        <div class="flex w-full items-center justify-between gap-3">
+                                            <span class="inline-flex shrink-0 items-center gap-1">
+                                                <span
+                                                    class="size-3 rounded-sm border"
+                                                    :style="{ backgroundColor: getThemeHexColor(option.buttonColor) }"
+                                                    title="Button color"></span>
+                                                <span
+                                                    class="size-3 rounded-sm border"
+                                                    :style="{ backgroundColor: getThemeHexColor(option.iconColor) }"
+                                                    title="Icon color"></span>
+                                                <span
+                                                    class="size-3 rounded-sm border"
+                                                    :style="{ backgroundColor: getThemeHexColor(option.subtextColor) }"
+                                                    title="Subtext color"></span>
+                                            </span>
+                                            <span class="truncate">{{ option.name }}</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editProfileDialog.loading"
+                            @click="handleCreateNewTheme">
+                            {{ t('dialog.edit_profile.create_theme') }}
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editProfileDialog.loading || !editProfileDialog.themeId"
+                            @click="deleteTheme">
+                            {{ t('dialog.edit_profile.delete_theme') }}
+                        </Button>
+                    </div>
+
+                    <InputGroupField
+                        class="min-w-0 flex-1 mb-1"
+                        v-model="editProfileDialog.themeName"
+                        @input="handleThemeInput"
+                        :maxlength="12"
+                        :placeholder="t('dialog.edit_profile.theme_name_placeholder')">
+                    </InputGroupField>
+                    <div class="flex gap-2">
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">{{ t('dialog.edit_profile.button') }}</span>
+                            <div class="flex items-center gap-2">
+                                <ColorPickerButton
+                                    :model-value="themeButtonColorValue"
+                                    :disabled="editProfileDialog.loading"
+                                    @update:model-value="handleThemeButtonColorInput" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">{{ t('dialog.edit_profile.icon') }}</span>
+                            <div class="flex items-center gap-2">
+                                <ColorPickerButton
+                                    :model-value="themeIconColorValue"
+                                    :disabled="editProfileDialog.loading"
+                                    @update:model-value="handleThemeIconColorInput" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">{{ t('dialog.edit_profile.subtext') }}</span>
+                            <div class="flex items-center gap-2">
+                                <ColorPickerButton
+                                    :model-value="themeSubtextColorValue"
+                                    :disabled="editProfileDialog.loading"
+                                    @update:model-value="handleThemeSubtextColorInput" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="space-y-3">
+                    <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.profile_background') }}</h3>
+                    <div class="flex items-center gap-2">
+                        <Select
+                            :model-value="props.editProfileDialog.backgroundType"
+                            :disabled="editProfileDialog.loading"
+                            @update:modelValue="handleProfileBackgroundTypeChange">
+                            <SelectTrigger size="sm" class="w-42">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem
+                                        v-for="option in profileBackgroundTypeOptions"
+                                        :key="option.value"
+                                        :value="option.value"
+                                        :text-value="option.label">
+                                        {{ option.label }}
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div v-if="editProfileDialog.backgroundType === 'gradient'" class="flex gap-2">
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">
+                                {{ t('dialog.edit_profile.gradient_top') }}
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <ColorPickerButton
+                                    :model-value="backgroundGradientTopColorValue"
+                                    :disabled="editProfileDialog.loading"
+                                    @update:model-value="handleBackgroundGradientTopColorInput" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">
+                                {{ t('dialog.edit_profile.gradient_bottom') }}
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <ColorPickerButton
+                                    :model-value="backgroundGradientBottomColorValue"
+                                    :disabled="editProfileDialog.loading"
+                                    @update:model-value="handleBackgroundGradientBottomColorInput" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="editProfileDialog.backgroundType === 'texture'" class="space-y-2">
+                        <Select
+                            :model-value="props.editProfileDialog.backgroundTextureId"
+                            :disabled="editProfileDialog.loading"
+                            @update:modelValue="handleBackgroundTextureChange">
+                            <SelectTrigger size="sm" class="h-14! w-80">
+                                <SelectValue :placeholder="t('dialog.edit_profile.profile_background_type_image')">
+                                    <template v-if="selectedProfileBackgroundTextureOption">
+                                        <span class="inline-flex min-w-0 items-center gap-2">
+                                            <img
+                                                :src="selectedProfileBackgroundTextureOption.thumbnail"
+                                                class="h-9 w-16 shrink-0 rounded-sm object-cover"
+                                                :alt="selectedProfileBackgroundTextureOption.label"
+                                                loading="lazy" />
+                                            <span class="truncate">{{
+                                                selectedProfileBackgroundTextureOption.label
+                                            }}</span>
+                                        </span>
+                                    </template>
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent class="w-80">
+                                <SelectGroup>
+                                    <SelectItem
+                                        v-for="option in profileBackgrounds"
+                                        :key="option.id"
+                                        :value="option.id"
+                                        :text-value="option.label"
+                                        :disabled="!isLocalUserVrcPlusSupporter && option.isVRCPlus">
+                                        <div class="flex items-center gap-2">
+                                            <img
+                                                :src="option.thumbnail"
+                                                class="h-9 w-16 shrink-0 rounded-sm object-cover"
+                                                :alt="option.label"
+                                                loading="lazy" />
+                                            <span>{{ option.label }}</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </section>
+
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.nameplate_effect') }}</h3>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editProfileDialog.loading || !editProfileDialog.nameplateEffect"
+                            @click="editProfileDialog.nameplateEffect = ''">
+                            <X class="size-4" />
+                            {{ t('common.actions.clear') }}
+                        </Button>
+                    </div>
+                    <Popover v-model:open="nameplateEffectsOpen">
+                        <PopoverTrigger as-child>
+                            <Button
+                                variant="outline"
+                                class="h-16 w-full justify-between px-3"
+                                :disabled="editProfileDialog.loading">
+                                <span v-if="selectedNameplateEffect" class="flex min-w-0 items-center gap-3">
+                                    <img
+                                        :src="selectedNameplateEffect.imageUrl"
+                                        :alt="selectedNameplateEffect.name"
+                                        class="size-12 shrink-0 rounded-sm object-cover"
+                                        loading="lazy" />
+                                    <span class="truncate">{{ selectedNameplateEffect.name }}</span>
+                                </span>
+                                <span v-else class="text-muted-foreground">{{
+                                    t('dialog.edit_profile.select_effect')
+                                }}</span>
+                                <ChevronDown class="size-4 shrink-0" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-130 max-w-[calc(100vw-2rem)] p-3" align="start">
+                            <div
+                                v-if="nameplateEffects.length"
+                                class="grid max-h-105 grid-cols-2 gap-3 overflow-y-auto">
+                                <button
+                                    v-for="item in nameplateEffects"
+                                    :key="item.templateId"
+                                    type="button"
+                                    class="relative min-w-0 overflow-hidden rounded-md border bg-background text-left transition-colors hover:bg-accent"
+                                    :class="{
+                                        'border-primary ring-2 ring-inset ring-primary/40':
+                                            editProfileDialog.nameplateEffect === item.templateId
+                                    }"
+                                    :aria-label="item.name"
+                                    :aria-pressed="editProfileDialog.nameplateEffect === item.templateId"
+                                    @click="selectNameplateEffect(item.templateId)">
+                                    <img
+                                        :src="item.imageUrl"
+                                        :alt="item.name"
+                                        class="aspect-square w-full object-cover"
+                                        loading="lazy" />
+                                    <span class="block truncate px-3 py-2 text-sm font-medium">{{ item.name }}</span>
+                                    <span
+                                        v-if="editProfileDialog.nameplateEffect === item.templateId"
+                                        class="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                        <Check class="size-4" />
+                                    </span>
+                                </button>
+                            </div>
+                            <p v-else class="text-sm text-muted-foreground">{{ t('common.no_data') }}</p>
+                        </PopoverContent>
+                    </Popover>
+                </section>
+
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.profile_effect') }}</h3>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editProfileDialog.loading || !editProfileDialog.profileEffect"
+                            @click="editProfileDialog.profileEffect = ''">
+                            <X class="size-4" />
+                            {{ t('common.actions.clear') }}
+                        </Button>
+                    </div>
+                    <Popover v-model:open="profileEffectsOpen">
+                        <PopoverTrigger as-child>
+                            <Button
+                                variant="outline"
+                                class="h-16 w-full justify-between px-3"
+                                :disabled="editProfileDialog.loading">
+                                <span v-if="selectedProfileEffect" class="flex min-w-0 items-center gap-3">
+                                    <img
+                                        :src="selectedProfileEffect.imageUrl"
+                                        :alt="selectedProfileEffect.name"
+                                        class="size-12 shrink-0 rounded-sm object-cover"
+                                        loading="lazy" />
+                                    <span class="truncate">{{ selectedProfileEffect.name }}</span>
+                                </span>
+                                <span v-else class="text-muted-foreground">{{
+                                    t('dialog.edit_profile.select_effect')
+                                }}</span>
+                                <ChevronDown class="size-4 shrink-0" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-130 max-w-[calc(100vw-2rem)] p-3" align="start">
+                            <div v-if="profileEffects.length" class="grid max-h-105 grid-cols-2 gap-3 overflow-y-auto">
+                                <button
+                                    v-for="item in profileEffects"
+                                    :key="item.id"
+                                    type="button"
+                                    class="relative min-w-0 overflow-hidden rounded-md border bg-background text-left transition-colors hover:bg-accent"
+                                    :class="{
+                                        'border-primary ring-2 ring-inset ring-primary/40':
+                                            editProfileDialog.profileEffect === item.templateId
+                                    }"
+                                    :aria-label="item.name"
+                                    :aria-pressed="editProfileDialog.profileEffect === item.templateId"
+                                    @click="selectProfileEffect(item.templateId)">
+                                    <img
+                                        :src="item.imageUrl"
+                                        :alt="item.name"
+                                        class="aspect-square w-full object-cover"
+                                        loading="lazy" />
+                                    <span class="block truncate px-3 py-2 text-sm font-medium">{{ item.name }}</span>
+                                    <span
+                                        v-if="editProfileDialog.profileEffect === item.templateId"
+                                        class="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                        <Check class="size-4" />
+                                    </span>
+                                </button>
+                            </div>
+                            <p v-else class="text-sm text-muted-foreground">{{ t('common.no_data') }}</p>
+                        </PopoverContent>
+                    </Popover>
+                </section>
+
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold">{{ t('dialog.edit_profile.icon_frame') }}</h3>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editProfileDialog.loading || !editProfileDialog.iconFrame"
+                            @click="editProfileDialog.iconFrame = ''">
+                            <X class="size-4" />
+                            {{ t('common.actions.clear') }}
+                        </Button>
+                    </div>
+                    <Popover v-model:open="iconFramesOpen">
+                        <PopoverTrigger as-child>
+                            <Button
+                                variant="outline"
+                                class="h-16 w-full justify-between px-3"
+                                :disabled="editProfileDialog.loading">
+                                <span v-if="selectedIconFrame" class="flex min-w-0 items-center gap-3">
+                                    <img
+                                        :src="selectedIconFrame.imageUrl"
+                                        :alt="selectedIconFrame.name"
+                                        class="size-12 shrink-0 rounded-sm object-cover"
+                                        loading="lazy" />
+                                    <span class="truncate">{{ selectedIconFrame.name }}</span>
+                                </span>
+                                <span v-else class="text-muted-foreground">{{
+                                    t('dialog.edit_profile.select_effect')
+                                }}</span>
+                                <ChevronDown class="size-4 shrink-0" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-130 max-w-[calc(100vw-2rem)] p-3" align="start">
+                            <div v-if="iconFrames.length" class="grid max-h-105 grid-cols-2 gap-3 overflow-y-auto">
+                                <button
+                                    v-for="item in iconFrames"
+                                    :key="item.templateId"
+                                    type="button"
+                                    class="relative min-w-0 overflow-hidden rounded-md border bg-background text-left transition-colors hover:bg-accent"
+                                    :class="{
+                                        'border-primary ring-2 ring-inset ring-primary/40':
+                                            editProfileDialog.iconFrame === item.templateId
+                                    }"
+                                    :aria-label="item.name"
+                                    :aria-pressed="editProfileDialog.iconFrame === item.templateId"
+                                    @click="selectIconFrame(item.templateId)">
+                                    <img
+                                        :src="item.imageUrl"
+                                        :alt="item.name"
+                                        class="aspect-square w-full object-cover"
+                                        loading="lazy" />
+                                    <span class="block truncate px-3 py-2 text-sm font-medium">{{ item.name }}</span>
+                                    <span
+                                        v-if="editProfileDialog.iconFrame === item.templateId"
+                                        class="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                        <Check class="size-4" />
+                                    </span>
+                                </button>
+                            </div>
+                            <p v-else class="text-sm text-muted-foreground">{{ t('common.no_data') }}</p>
+                        </PopoverContent>
+                    </Popover>
+                </section>
             </div>
 
             <DialogFooter class="px-6 py-4">
@@ -519,14 +684,16 @@
 </template>
 
 <script setup>
-    import { computed, ref } from 'vue';
+    import { computed, ref, watch } from 'vue';
     import { storeToRefs } from 'pinia';
     import { toast } from 'vue-sonner';
     import { useI18n } from 'vue-i18n';
-    import { Bookmark, History, Trash2, X } from 'lucide-vue-next';
+    import { Bookmark, Check, ChevronDown, History, Trash2, X } from 'lucide-vue-next';
 
     import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
     import { Button } from '@/components/ui/button';
+    import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+    import ColorPickerButton from '@/components/ColorPickerButton.vue';
     import {
         InputGroupAction,
         InputGroupButton,
@@ -555,8 +722,9 @@
     const { currentUser, isLocalUserVrcPlusSupporter } = storeToRefs(useUserStore());
     const authStore = useAuthStore();
     const modalStore = useModalStore();
-    const { refreshGalleryTable } = useGalleryStore();
+    const { refreshGalleryTable, getInventory } = useGalleryStore();
     const { presets, addPreset, removePreset, getStatusClass, MAX_PRESETS } = useStatusPresets();
+    const { inventoryTable } = storeToRefs(useGalleryStore());
 
     const props = defineProps({
         editProfileDialog: {
@@ -566,12 +734,42 @@
     });
 
     const selectedLanguageToAdd = ref('');
+    const nameplateEffectsOpen = ref(false);
+    const profileEffectsOpen = ref(false);
+    const iconFramesOpen = ref(false);
     const gallerySelectDialog = ref({
         visible: false,
         selectedFileId: '',
         selectedImageUrl: '',
         isIconGallerySelectDialog: false
     });
+
+    watch(
+        () => props.editProfileDialog.visible,
+        (visible) => {
+            if (visible) {
+                getInventory();
+            }
+        },
+        { immediate: true }
+    );
+
+    const nameplateEffects = computed(
+        () => inventoryTable.value?.filter((item) => item.itemType === 'nameplateEffect') ?? []
+    );
+    const profileEffects = computed(
+        () => inventoryTable.value?.filter((item) => item.itemType === 'profileEffect') ?? []
+    );
+    const iconFrames = computed(() => inventoryTable.value?.filter((item) => item.itemType === 'iconFrame') ?? []);
+    const selectedNameplateEffect = computed(() =>
+        nameplateEffects.value.find((item) => item.templateId === props.editProfileDialog.nameplateEffect)
+    );
+    const selectedProfileEffect = computed(() =>
+        profileEffects.value.find((item) => item.templateId === props.editProfileDialog.profileEffect)
+    );
+    const selectedIconFrame = computed(() =>
+        iconFrames.value.find((item) => item.templateId === props.editProfileDialog.iconFrame)
+    );
 
     const currentLanguages = computed(() => currentUser.value?.$languages ?? []);
     const availableLanguages = computed(() => {
@@ -691,6 +889,21 @@
         props.editProfileDialog.status = String(value);
     }
 
+    function selectNameplateEffect(id) {
+        props.editProfileDialog.nameplateEffect = id;
+        nameplateEffectsOpen.value = false;
+    }
+
+    function selectProfileEffect(id) {
+        props.editProfileDialog.profileEffect = id;
+        profileEffectsOpen.value = false;
+    }
+
+    function selectIconFrame(id) {
+        props.editProfileDialog.iconFrame = id;
+        iconFramesOpen.value = false;
+    }
+
     function setSocialStatusFromHistory(val) {
         if (val === null) {
             return;
@@ -699,7 +912,7 @@
     }
 
     function handleBannerColorInput(event) {
-        const normalized = normalizeColor(event?.target?.value);
+        const normalized = normalizeColor(event);
         if (!normalized) {
             return;
         }
@@ -742,7 +955,7 @@
     }
 
     function handleBackgroundGradientTopColorInput(event) {
-        const normalized = normalizeColor(event?.target?.value);
+        const normalized = normalizeColor(event);
         if (!normalized) {
             return;
         }
@@ -752,7 +965,7 @@
     }
 
     function handleBackgroundGradientBottomColorInput(event) {
-        const normalized = normalizeColor(event?.target?.value);
+        const normalized = normalizeColor(event);
         if (!normalized) {
             return;
         }
@@ -776,19 +989,19 @@
 
     function handleThemeButtonColorInput(event) {
         const D = props.editProfileDialog;
-        D.themeButtonColor = normalizeColor(event?.target?.value);
+        D.themeButtonColor = normalizeColor(event);
         handleThemeInput();
     }
 
     function handleThemeIconColorInput(event) {
         const D = props.editProfileDialog;
-        D.themeIconColor = normalizeColor(event?.target?.value);
+        D.themeIconColor = normalizeColor(event);
         handleThemeInput();
     }
 
     function handleThemeSubtextColorInput(event) {
         const D = props.editProfileDialog;
-        D.themeSubtextColor = normalizeColor(event?.target?.value);
+        D.themeSubtextColor = normalizeColor(event);
         handleThemeInput();
     }
 
@@ -928,7 +1141,7 @@
     function handleGalleryImageSelect({ imageUrl }) {
         const D = props.editProfileDialog;
         if (gallerySelectDialog.value.isIconGallerySelectDialog) {
-            D.userIcon = imageUrl;
+            D.iconUrl = imageUrl;
         } else {
             if (!imageUrl) {
                 D.bannerType = 'color';
@@ -941,7 +1154,7 @@
 
     function clearUserIcon() {
         const D = props.editProfileDialog;
-        D.userIcon = '';
+        D.iconUrl = '';
     }
 
     function handleAddUserLanguage(language) {
@@ -985,7 +1198,7 @@
             return;
         }
 
-        /** @type {Partial<import("../../../types/api/user").GetCurrentUserResponse>} */
+        /** @type {Partial<import('../../../types/api/user').GetCurrentUserResponse>} */
         const userPayload = {};
         if (D.status !== currentUser.value.status) {
             userPayload.status = D.status;
@@ -996,26 +1209,36 @@
         if (D.pronouns !== currentUser.value.pronouns) {
             userPayload.pronouns = D.pronouns;
         }
-        if (D.bio !== currentUser.value.bio) {
-            userPayload.bio = D.bio;
-        }
-        if (!arraysMatch(D.bioLinks, currentUser.value.bioLinks)) {
-            userPayload.bioLinks = D.bioLinks;
-        }
 
-        /** @type {Partial<import("../../../types/api/profile").selfProfile>} */
+        /** @type {Partial<import('../../../types/api/profile').selfProfile>} */
         const profilePayload = {};
-        if (D.bannerColor !== currentUser.value.bannerColor) {
+        if (D.bio !== D.selfProfileRef.bio) {
+            profilePayload.bio = D.bio;
+        }
+        if (!arraysMatch(D.bioLinks, D.selfProfileRef.bioLinks)) {
+            profilePayload.bioLinks = D.bioLinks;
+        }
+        if (D.bannerColor !== D.selfProfileRef.bannerColor) {
             profilePayload.bannerColor = D.bannerColor;
         }
-        if (D.bannerUrl !== currentUser.value.bannerUrl) {
+        if (D.bannerUrl !== D.selfProfileRef.bannerUrl) {
             profilePayload.bannerCustomUrl = D.bannerUrl;
         }
-        if (D.bannerType !== currentUser.value.bannerType) {
+        if (D.bannerType !== D.selfProfileRef.bannerType) {
             profilePayload.bannerType = D.bannerType;
+            if (D.bannerType === 'avatarBanner') {
+                profilePayload.bannerCustomUrl = undefined;
+                profilePayload.bannerColor = undefined;
+            }
+            if (D.bannerType === 'color') {
+                profilePayload.bannerCustomUrl = undefined;
+            }
+            if (D.bannerType === 'customImage') {
+                profilePayload.bannerColor = undefined;
+            }
         }
-        if (D.userIcon !== currentUser.value.userIcon) {
-            profilePayload.userIcon = D.userIcon;
+        if (D.iconUrl !== D.selfProfileRef.iconUrl) {
+            profilePayload.userIcon = D.iconUrl;
         }
         if (D.themeId !== D.selfProfileRef.themeId) {
             profilePayload.themeId = D.themeId;
@@ -1032,17 +1255,24 @@
         if (D.backgroundGradientTop !== D.selfProfileRef.backgroundGradientTop) {
             profilePayload.backgroundGradientTop = D.backgroundGradientTop;
         }
-        if (!Object.keys(userPayload).length && !Object.keys(profilePayload).length) {
-            D.visible = false;
-            return;
+        if (D.nameplateEffect !== D.selfProfileRef.nameplateEffect) {
+            profilePayload.nameplateEffect = D.nameplateEffect;
+        }
+        if (D.profileEffect !== D.selfProfileRef.profileEffect) {
+            profilePayload.profileEffect = D.profileEffect;
+        }
+        if (D.iconFrame !== D.selfProfileRef.iconFrame) {
+            profilePayload.iconFrame = D.iconFrame;
         }
 
         D.loading = true;
         try {
             if (Object.keys(profilePayload).length) {
+                console.log('Saving profile with payload:', profilePayload);
                 await userRequest.saveProfile(profilePayload);
             }
             if (Object.keys(userPayload).length) {
+                console.log('Saving user with payload:', userPayload);
                 await userRequest.saveCurrentUser(userPayload);
             }
             D.visible = false;

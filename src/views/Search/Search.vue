@@ -36,10 +36,6 @@
                 <div class="flex flex-col min-h-0" style="flex: 9">
                     <div class="shrink-0 mb-3 flex justify-end">
                         <label class="inline-flex items-center gap-2 ml-2">
-                            <Checkbox v-model="searchUserByBio" />
-                            <span>{{ t('view.search.user.search_by_bio') }}</span>
-                        </label>
-                        <label class="inline-flex items-center gap-2 ml-2">
                             <Checkbox v-model="searchUserSortByLastLoggedIn" />
                             <span>{{ t('view.search.user.sort_by_last_logged_in') }}</span>
                         </label>
@@ -52,15 +48,17 @@
                             <Item
                                 v-for="user in searchUserResults"
                                 :key="user.id"
-                                class="cursor-pointer hover:bg-muted x-hover-list rounded-none"
+                                size="sm"
+                                class="cursor-pointer gap-2 px-3 py-2 hover:bg-muted x-hover-list rounded-none"
                                 @click="showUserDialog(user.id)">
-                                <ItemMedia variant="image">
-                                    <Avatar>
+                                <ItemMedia class="relative size-10">
+                                    <Avatar class="size-full">
                                         <AvatarImage :src="userImage(user, true)" loading="lazy" />
                                         <AvatarFallback>
                                             <User class="size-5 text-muted-foreground" />
                                         </AvatarFallback>
                                     </Avatar>
+                                    <IconFrame :icon-frame="user.iconFrame" />
                                 </ItemMedia>
                                 <ItemContent class="min-w-0">
                                     <ItemTitle class="flex items-center gap-1.5 max-w-full">
@@ -263,7 +261,8 @@
                         <Item
                             v-for="group in searchGroupResults"
                             :key="group.id"
-                            class="cursor-pointer hover:bg-muted x-hover-list rounded-none"
+                            size="sm"
+                            class="cursor-pointer gap-2 px-3 py-2 hover:bg-muted x-hover-list rounded-none"
                             @click="showGroupDialog(group.id)">
                             <ItemMedia variant="image">
                                 <Avatar class="rounded-sm">
@@ -305,6 +304,7 @@
     import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
     import { Settings, Trash2, User, Users } from 'lucide-vue-next';
     import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    import IconFrame from '@/components/IconFrame.vue';
     import { DataTableEmpty } from '@/components/ui/data-table';
     import { Spinner } from '@/components/ui/spinner';
     import AvatarProviderDialog from '../Settings/dialogs/AvatarProviderDialog.vue';
@@ -382,7 +382,6 @@
 
     const {
         searchUserParams,
-        searchUserByBio,
         searchUserSortByLastLoggedIn,
         isSearchUserLoading,
         searchUser,
@@ -421,13 +420,14 @@
         clearGroupSearch
     } = useSearchGroup();
 
+    const pageSize = 60;
     const paginationConfig = computed(() => {
         switch (activeSearchTab.value) {
             case 'user':
                 return {
                     show: searchUserResults.value.length > 0 && !isSearchUserLoading.value,
                     prevDisabled: !searchUserParams.value.offset,
-                    nextDisabled: searchUserResults.value.length < 10,
+                    nextDisabled: searchUserResults.value.length < pageSize,
                     onPrev: () => handleMoreSearchUser(-1),
                     onNext: () => handleMoreSearchUser(1)
                 };
@@ -435,7 +435,7 @@
                 return {
                     show: searchWorldResults.value.length > 0 && !isSearchWorldLoading.value,
                     prevDisabled: !searchWorldParams.value.offset,
-                    nextDisabled: searchWorldResults.value.length < 10,
+                    nextDisabled: searchWorldResults.value.length < pageSize,
                     onPrev: () => moreSearchWorld(-1),
                     onNext: () => moreSearchWorld(1)
                 };
@@ -453,7 +453,7 @@
                 return {
                     show: searchGroupResults.value.length > 0 && !isSearchGroupLoading.value,
                     prevDisabled: !searchGroupParams.value.offset,
-                    nextDisabled: searchGroupResults.value.length < 10,
+                    nextDisabled: searchGroupResults.value.length < pageSize,
                     onPrev: () => moreSearchGroup(-1),
                     onNext: () => moreSearchGroup(1)
                 };
@@ -466,9 +466,6 @@
         return convertFileUrlToImageUrl(url);
     }
 
-    /**
-     *
-     */
     function handleClearSearch() {
         clearUserSearch();
         clearWorldSearch();
@@ -478,16 +475,12 @@
     }
 
     /**
-     *
      * @param text
      */
     function updateSearchText(text) {
         searchText.value = text;
     }
 
-    /**
-     *
-     */
     function search() {
         if (activeSearchTab.value === 'avatar' && (!searchText.value || searchText.value.length < 3)) {
             toast.warning(t('view.search.avatar.min_chars_warning'));

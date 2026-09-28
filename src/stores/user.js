@@ -1,5 +1,6 @@
 import { computed, reactive, ref, shallowReactive, watch } from 'vue';
 import { defineStore } from 'pinia';
+import { useI18n } from 'vue-i18n';
 
 import {
     compareByCreatedAt,
@@ -12,7 +13,7 @@ import {
     replaceBioSymbols
 } from '../shared/utils';
 import { getAllUserMemos } from '../coordinators/memoCoordinator';
-import { instanceRequest, userRequest } from '../api';
+import { instanceRequest, userRequest, cosmeticsRequest } from '../api';
 import { AppDebug } from '../services/appConfig';
 import { database } from '../services/database';
 import { runUpdateCurrentUserLocationFlow } from '../coordinators/locationCoordinator';
@@ -20,6 +21,7 @@ import { useAppearanceSettingsStore } from './settings/appearance';
 import { useFriendStore } from './friend';
 import { useInstanceStore } from './instance';
 import { useLocationStore } from './location';
+import { useModalStore } from './modal';
 import { syncFriendSearchIndex } from '../coordinators/searchIndexCoordinator';
 import { useUiStore } from './ui';
 import { watchState } from '../services/watchState';
@@ -31,7 +33,9 @@ export const useUserStore = defineStore('User', () => {
     const friendStore = useFriendStore();
     const locationStore = useLocationStore();
     const instanceStore = useInstanceStore();
+    const modalStore = useModalStore();
     const uiStore = useUiStore();
+    const { t } = useI18n();
 
     const currentUser = ref(
         /** @type {import('../types/api/user').VrcxCurrentUser} */ ({
@@ -134,6 +138,13 @@ export const useUserStore = defineStore('User', () => {
             steamId: '',
             tags: [],
             temporaryExpiryDate: null,
+            twitchDetails: {
+                display_name: '',
+                id: '',
+                login: '',
+                profile_image_url: ''
+            },
+            twitchId: '',
             twoFactorAuthEnabled: false,
             twoFactorAuthEnabledDate: null,
             unsubscribe: false,
@@ -164,6 +175,8 @@ export const useUserStore = defineStore('User', () => {
             $travelingToLocation: ''
         })
     );
+
+    const currentUserCredits = ref(null);
 
     const userDialog = ref({
         visible: false,
@@ -288,6 +301,7 @@ export const useUserStore = defineStore('User', () => {
         bannerUrl: '',
         bannerType: '',
         userIcon: '',
+        iconUrl: '',
         themes: [],
         themeId: '',
         themeName: '',
@@ -297,7 +311,10 @@ export const useUserStore = defineStore('User', () => {
         backgroundType: 'default',
         backgroundTextureId: '',
         backgroundGradientBottom: '',
-        backgroundGradientTop: ''
+        backgroundGradientTop: '',
+        nameplateEffect: '',
+        profileEffect: '',
+        iconFrame: ''
     });
 
     const currentTravelers = reactive(new Map());
@@ -317,7 +334,12 @@ export const useUserStore = defineStore('User', () => {
     });
 
     const cachedUsers = shallowReactive(new Map());
+    const cachedProfiles = ref(new Map());
     const cachedUserIdsByDisplayName = shallowReactive(new Map());
+
+    const cachedProfileEffects = shallowReactive(new Map());
+    const cachedIconFrames = shallowReactive(new Map());
+    const cachedNameplateEffects = shallowReactive(new Map());
 
     function addCachedUserDisplayNameEntry(displayName, userId) {
         if (!displayName || !userId) {
@@ -355,11 +377,7 @@ export const useUserStore = defineStore('User', () => {
         addCachedUserDisplayNameEntry(ref.displayName, ref.id);
     }
 
-    function setCachedUser(
-        ref,
-        previousDisplayName = '',
-        { skipIndex = false } = {}
-    ) {
+    function setCachedUser(ref, previousDisplayName = '', { skipIndex = false } = {}) {
         if (!ref?.id) {
             return;
         }
@@ -378,8 +396,17 @@ export const useUserStore = defineStore('User', () => {
         return cachedUsers.delete(userId);
     }
 
+    function deleteCachedProfile(userId) {
+        const ref = cachedProfiles.value.get(userId);
+        if (!ref) {
+            return false;
+        }
+        return cachedProfiles.value.delete(userId);
+    }
+
     function clearCachedUsers() {
         cachedUsers.clear();
+        cachedProfiles.value.clear();
         cachedUserIdsByDisplayName.clear();
     }
 
@@ -390,9 +417,7 @@ export const useUserStore = defineStore('User', () => {
         }
     }
 
-    const isLocalUserVrcPlusSupporter = computed(
-        () => currentUser.value.$isVRCPlus || AppDebug.debugVrcPlus
-    );
+    const isLocalUserVrcPlusSupporter = computed(() => currentUser.value.$isVRCPlus || AppDebug.debugVrcPlus);
 
     watch(
         () => watchState.isLoggedIn,
@@ -513,10 +538,7 @@ export const useUserStore = defineStore('User', () => {
             }
         }
         // dont use gamelog when using api location
-        if (
-            locationStore.lastLocation.location === L.tag &&
-            playersInInstance.size > 0
-        ) {
+        if (locationStore.lastLocation.location === L.tag && playersInInstance.size > 0) {
             const friendsInInstance = locationStore.lastLocation.friendList;
             for (friend of friendsInInstance.values()) {
                 // if friend isn't in instance add them
@@ -537,17 +559,12 @@ export const useUserStore = defineStore('User', () => {
                 if (typeof friend.ref === 'undefined') {
                     continue;
                 }
-                if (
-                    friend.ref.location === locationStore.lastLocation.location
-                ) {
+                if (friend.ref.location === locationStore.lastLocation.location) {
                     // don't add friends to currentUser gameLog instance (except when traveling)
                     continue;
                 }
                 if (friend.ref.$location.tag === L.tag) {
-                    if (
-                        friend.state !== 'online' &&
-                        friend.ref.location === 'private'
-                    ) {
+                    if (friend.state !== 'online' && friend.ref.location === 'private') {
                         // don't add offline friends to private instances
                         continue;
                     }
@@ -568,12 +585,7 @@ export const useUserStore = defineStore('User', () => {
             users.sort(compareByLocationAt);
         }
         D.users = users;
-        if (
-            (L.worldId &&
-                currentLocation === L.tag &&
-                playersInInstance.size > 0) ||
-            !L.isRealInstance
-        ) {
+        if ((L.worldId && currentLocation === L.tag && playersInInstance.size > 0) || !L.isRealInstance) {
             D.instance = {
                 id: L.instanceId,
                 tag: L.tag,
@@ -604,8 +616,6 @@ export const useUserStore = defineStore('User', () => {
         D.avatars = array;
     }
 
-    /**
-     */
     async function initUserNotes() {
         state.lastNoteCheck = new Date();
         state.lastDbNoteDate = null;
@@ -623,10 +633,7 @@ export const useUserStore = defineStore('User', () => {
                         syncFriendSearchIndex(friendCtx);
                     }
                 }
-                if (
-                    !state.lastDbNoteDate ||
-                    state.lastDbNoteDate < note.createdAt
-                ) {
+                if (!state.lastDbNoteDate || state.lastDbNoteDate < note.createdAt) {
                     state.lastDbNoteDate = note.createdAt;
                 }
             }
@@ -636,8 +643,6 @@ export const useUserStore = defineStore('User', () => {
         }
     }
 
-    /**
-     */
     async function getLatestUserNotes() {
         state.lastNoteCheck = new Date();
         const params = {
@@ -651,16 +656,10 @@ export const useUserStore = defineStore('User', () => {
                 params.offset = i * params.n;
                 const args = await userRequest.getUserNotes(params);
                 for (const note of args.json) {
-                    if (
-                        state.lastDbNoteDate &&
-                        state.lastDbNoteDate > note.createdAt
-                    ) {
+                    if (state.lastDbNoteDate && state.lastDbNoteDate > note.createdAt) {
                         done = true;
                     }
-                    if (
-                        !state.lastDbNoteDate ||
-                        state.lastDbNoteDate < note.createdAt
-                    ) {
+                    if (!state.lastDbNoteDate || state.lastDbNoteDate < note.createdAt) {
                         state.lastDbNoteDate = note.createdAt;
                     }
                     note.note = replaceBioSymbols(note.note);
@@ -704,10 +703,7 @@ export const useUserStore = defineStore('User', () => {
      * @param newNote
      */
     async function checkNote(userId, newNote) {
-        if (
-            !state.lastNoteCheck ||
-            state.lastNoteCheck.getTime() + 5 * 60 * 1000 > Date.now()
-        ) {
+        if (!state.lastNoteCheck || state.lastNoteCheck.getTime() + 5 * 60 * 1000 > Date.now()) {
             return;
         }
         const existingNote = state.notes.get(userId);
@@ -764,11 +760,7 @@ export const useUserStore = defineStore('User', () => {
      * @param {string} travelingToLocation
      * @param {number} timestamp
      */
-    function setCurrentUserLocationState(
-        location,
-        travelingToLocation,
-        timestamp = Date.now()
-    ) {
+    function setCurrentUserLocationState(location, travelingToLocation, timestamp = Date.now()) {
         currentUser.value.$location_at = timestamp;
         currentUser.value.$travelingToTime = timestamp;
         currentUser.value.$locationTag = location;
@@ -811,12 +803,10 @@ export const useUserStore = defineStore('User', () => {
         D.status = currentUser.value.status;
         D.statusDescription = currentUser.value.statusDescription;
         D.pronouns = currentUser.value.pronouns;
-        D.bio = currentUser.value.bio;
-        D.bioLinks = currentUser.value.bioLinks.slice();
         D.bannerColor = currentUser.value.bannerColor;
         D.bannerUrl = currentUser.value.bannerUrl;
         D.bannerType = currentUser.value.bannerType;
-        D.userIcon = currentUser.value.userIcon;
+        D.iconUrl = currentUser.value.iconUrl;
 
         D.themeId = '';
         D.themes = [];
@@ -836,14 +826,12 @@ export const useUserStore = defineStore('User', () => {
             D.bioLinks = ref.bioLinks.slice();
             D.bannerColor = ref.bannerColor;
             D.bannerUrl = ref.bannerUrl;
-            D.bannerType = ref.bannerType;
+            D.bannerType = ref.bannerType || 'color';
             D.userIcon = ref.userIcon;
 
             D.themes = ref.themes;
             D.themeId = ref.themeId;
-            const selectedTheme = ref.themes.find(
-                (theme) => theme.id === ref.themeId
-            );
+            const selectedTheme = ref.themes.find((theme) => theme.id === ref.themeId);
             D.themeName = selectedTheme?.name ?? '';
             D.themeButtonColor = ref.themeButtonColor;
             D.themeIconColor = ref.themeIconColor;
@@ -852,21 +840,20 @@ export const useUserStore = defineStore('User', () => {
             D.backgroundTextureId = ref.backgroundTextureId;
             D.backgroundGradientBottom = ref.backgroundGradientBottom;
             D.backgroundGradientTop = ref.backgroundGradientTop;
+            D.nameplateEffect = ref.nameplateEffect;
+            D.profileEffect = ref.profileEffect;
+            D.iconFrame = ref.iconFrame;
         });
 
         D.visible = true;
     }
 
-    /**
-     */
     function markCurrentUserGameStarted() {
         currentUser.value.$online_for = Date.now();
         currentUser.value.$offline_for = null;
         currentUser.value.$previousAvatarSwapTime = Date.now();
     }
 
-    /**
-     */
     function markCurrentUserGameStopped() {
         currentUser.value.$online_for = 0;
         currentUser.value.$offline_for = Date.now();
@@ -874,33 +861,66 @@ export const useUserStore = defineStore('User', () => {
     }
 
     /**
+     * @param {string} command
      */
-    function toggleAvatarCopying() {
+    async function confirmCurrentUserToggle(command, isEnableAction) {
+        const action = isEnableAction ? t('confirm.enable_action') : t('confirm.disable_action');
+        const { ok } = await modalStore.confirm({
+            title: t('confirm.title'),
+            description: t('confirm.command_question_toggle', {
+                action,
+                command
+            })
+        });
+        return ok;
+    }
+
+    async function toggleAvatarCopying() {
+        if (
+            !(await confirmCurrentUserToggle(
+                t('dialog.user.info.avatar_cloning'),
+                !currentUser.value.allowAvatarCopying
+            ))
+        ) {
+            return;
+        }
         userRequest.saveCurrentUser({
             allowAvatarCopying: !currentUser.value.allowAvatarCopying
         });
     }
 
-    /**
-     */
-    function toggleAllowBooping() {
+    async function toggleAllowBooping() {
+        if (!(await confirmCurrentUserToggle(t('dialog.user.info.booping'), !currentUser.value.isBoopingEnabled))) {
+            return;
+        }
         userRequest.saveCurrentUser({
             isBoopingEnabled: !currentUser.value.isBoopingEnabled
         });
     }
 
-    /**
-     */
-    function toggleSharedConnectionsOptOut() {
+    async function toggleSharedConnectionsOptOut() {
+        if (
+            !(await confirmCurrentUserToggle(
+                t('dialog.user.info.show_mutual_friends'),
+                currentUser.value.hasSharedConnectionsOptOut
+            ))
+        ) {
+            return;
+        }
         userRequest.saveCurrentUser({
-            hasSharedConnectionsOptOut:
-                !currentUser.value.hasSharedConnectionsOptOut
+            hasSharedConnectionsOptOut: !currentUser.value.hasSharedConnectionsOptOut
         });
     }
 
-    /**
-     */
-    function toggleDiscordFriendsOptOut() {
+    async function toggleDiscordFriendsOptOut() {
+        if (
+            !(await confirmCurrentUserToggle(
+                t('dialog.user.info.show_discord_connections'),
+                currentUser.value.hasDiscordFriendsOptOut
+            ))
+        ) {
+            return;
+        }
         userRequest.saveCurrentUser({
             hasDiscordFriendsOptOut: !currentUser.value.hasDiscordFriendsOptOut
         });
@@ -920,10 +940,39 @@ export const useUserStore = defineStore('User', () => {
         });
     }
 
+    watch(
+        () => watchState.isLoggedIn,
+        (isLoggedIn) => {
+            if (isLoggedIn) {
+                getCosmetics();
+            }
+        },
+        { flush: 'sync' }
+    );
+
+    function getCosmetics() {
+        cosmeticsRequest.getProfileEffects().then(({ json }) => {
+            json.forEach((effect) => {
+                cachedProfileEffects.set(effect.id, effect);
+            });
+        });
+        cosmeticsRequest.getIconFrames().then(({ json }) => {
+            json.forEach((frame) => {
+                cachedIconFrames.set(frame.id, frame);
+            });
+        });
+        cosmeticsRequest.gatNameplateEffects().then(({ json }) => {
+            json.forEach((effect) => {
+                cachedNameplateEffects.set(effect.id, effect);
+            });
+        });
+    }
+
     return {
         state,
 
         currentUser,
+        currentUserCredits,
         currentTravelers,
         userDialog,
         editProfileDialog,
@@ -932,14 +981,19 @@ export const useUserStore = defineStore('User', () => {
         showUserDialogHistory,
         customUserTags,
         cachedUsers,
+        cachedProfiles,
         cachedUserIdsByDisplayName,
         isLocalUserVrcPlusSupporter,
+        cachedProfileEffects,
+        cachedIconFrames,
+        cachedNameplateEffects,
         applyUserLanguage,
         applyPresenceLocation,
         applyUserDialogLocation,
         setCachedUser,
         syncCachedUserDisplayName,
         deleteCachedUser,
+        deleteCachedProfile,
         clearCachedUsers,
         rebuildCachedUserDisplayNameIndex,
         sortUserDialogAvatars,
@@ -962,6 +1016,7 @@ export const useUserStore = defineStore('User', () => {
         toggleAllowBooping,
         toggleAvatarCopying,
         changePassword,
-        changeContentFilterSettings
+        changeContentFilterSettings,
+        getCosmetics
     };
 });

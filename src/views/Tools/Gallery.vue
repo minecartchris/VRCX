@@ -69,14 +69,6 @@
                             <Upload />
                             {{ t('dialog.gallery_icons.upload') }}
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            :disabled="!currentUser.profilePicOverride"
-                            @click="setProfilePicOverride('')">
-                            <X />
-                            {{ t('dialog.gallery_icons.clear') }}
-                        </Button>
                     </ButtonGroup>
                     <ItemGroup
                         class="grid gap-3 mt-3"
@@ -87,7 +79,6 @@
                             variant="outline"
                             size="sm"
                             class="p-0 x-hover-card hover:bg-accent hover:shadow-sm"
-                            :class="compareCurrentProfilePic(image.id) ? 'x-highlight-ring' : ''"
                             as-child>
                             <div
                                 v-if="
@@ -113,13 +104,6 @@
                                         class="rounded-full text-destructive"
                                         @click="deleteGalleryImage(image.id)">
                                         <Trash2 />
-                                    </Button>
-                                    <Button
-                                        size="icon-sm"
-                                        class="rounded-full"
-                                        :variant="compareCurrentProfilePic(image.id) ? 'default' : 'ghost'"
-                                        @click="setProfilePicOverride(image.id)">
-                                        <Check />
                                     </Button>
                                 </ItemFooter>
                             </div>
@@ -152,8 +136,8 @@
                         <Button
                             variant="outline"
                             size="sm"
-                            :disabled="!currentUser.userIcon"
-                            @click="setVRCPlusIcon('')">
+                            :disabled="currentUser.userIcon === currentUser.currentAvatarImageUrl"
+                            @click="setUserIcon('')">
                             <X />
                             {{ t('dialog.gallery_icons.clear') }}
                         </Button>
@@ -198,7 +182,7 @@
                                         size="icon-sm"
                                         class="rounded-full"
                                         :variant="compareCurrentVRCPlusIcon(image.id) ? 'default' : 'ghost'"
-                                        @click="setVRCPlusIcon(image.id)">
+                                        @click="setUserIcon(image.id)">
                                         <Check />
                                     </Button>
                                 </ItemFooter>
@@ -502,6 +486,18 @@
                                         @click="deletePrint(image.id)">
                                         <Trash2 />
                                     </Button>
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        class="rounded-full ml-auto"
+                                        @click="toggleFavoritePrint(image.id)">
+                                        <Star
+                                            :class="
+                                                favoritePrintIds.has(image.id)
+                                                    ? 'text-yellow-500 fill-yellow-500'
+                                                    : 'hover:text-yellow-500'
+                                            " />
+                                    </Button>
                                 </ItemFooter>
                             </div>
                         </Item>
@@ -524,11 +520,11 @@
                         </ButtonGroup>
                         <Select v-model="inventoryTypeFilter">
                             <SelectTrigger size="sm" class="w-44">
-                                <SelectValue placeholder="All types" />
+                                <SelectValue :placeholder="t('dialog.gallery_icons.all_types')" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    <SelectItem value="all">All types</SelectItem>
+                                    <SelectItem value="all">{{ t('dialog.gallery_icons.all_types') }}</SelectItem>
                                     <SelectItem v-for="type in inventoryTypeOptions" :key="type" :value="type">
                                         {{ type }}
                                     </SelectItem>
@@ -590,7 +586,7 @@
 </template>
 
 <script setup>
-    import { ArrowLeft, Check, Gift, RefreshCw, Trash2, Upload, X } from 'lucide-vue-next';
+    import { ArrowLeft, Check, Gift, RefreshCw, Trash2, Upload, X, Star } from 'lucide-vue-next';
     import {
         NumberField,
         NumberFieldContent,
@@ -636,6 +632,7 @@
 
     import Emoji from '../../components/Emoji.vue';
     import ImageCropDialog from '../../components/dialogs/ImageCropDialog.vue';
+    import { database } from '../../services/database';
 
     const { t } = useI18n();
     const router = useRouter();
@@ -649,6 +646,7 @@
         printCropBorder,
         stickerTable,
         printTable,
+        favoritePrintIds,
         emojiTable,
         inventoryTable
     } = storeToRefs(useGalleryStore());
@@ -658,6 +656,7 @@
         refreshVRCPlusIconsTable,
         refreshStickerTable,
         refreshPrintTable,
+        refreshPrintFavorites,
         refreshEmojiTable,
         getInventory,
         handleStickerAdd,
@@ -669,7 +668,7 @@
     const { currentUser, isLocalUserVrcPlusSupporter } = storeToRefs(useUserStore());
     const { cachedConfig } = storeToRefs(useAuthStore());
     const cachedConfigTyped = computed(
-        () => /** @type {{ maxUserEmoji?: number, maxUserStickers?: number }} */ (cachedConfig.value ?? {})
+        () => /** @type {{ maxUserEmoji?: number; maxUserStickers?: number }} */ (cachedConfig.value ?? {})
     );
     const galleryTabs = computed(() => [
         { value: 'gallery', label: t('dialog.gallery_icons.gallery') },
@@ -738,30 +737,20 @@
         galleryDialogVisible.value = false;
     });
 
-    /**
-     *
-     */
     function startUpload() {
         pendingUploads.value += 1;
     }
 
-    /**
-     *
-     */
     function finishUpload() {
         pendingUploads.value = Math.max(0, pendingUploads.value - 1);
     }
 
-    /**
-     *
-     */
     function goBack() {
         galleryDialogVisible.value = false;
         router.push({ name: 'tools' });
     }
 
     /**
-     *
      * @param {string} id
      */
     function triggerFileInput(id) {
@@ -769,8 +758,7 @@
     }
 
     /**
-     *
-     * @param {Array<{ id: string }>} array
+     * @param {{ id: string }[]} array
      * @param {string} itemId
      */
     function removeItemById(array, itemId) {
@@ -784,7 +772,6 @@
     }
 
     /**
-     *
      * @param file
      * @param title
      * @param aspectRatio
@@ -799,7 +786,6 @@
     }
 
     /**
-     *
      * @param blob
      */
     async function onCropConfirm(blob) {
@@ -817,9 +803,8 @@
     }
 
     /**
-     *
      * @param {string} fileId
-     * @param {Array<{ id: string }>} array
+     * @param {{ id: string }[]} array
      */
     function deleteFileAndRemove(fileId, array) {
         miscRequest.deleteFile(fileId).then((args) => {
@@ -829,7 +814,6 @@
     }
 
     /**
-     *
      * @param {string} currentUrl
      * @param {string} fileId
      * @returns {boolean}
@@ -839,14 +823,13 @@
     }
 
     /**
-     *
      * @param {Event} e
      * @param {{
-     *   inputSelector: string,
-     *   aspectRatio: number,
-     *   beforeCrop?: (file: File) => void,
-     *   upload: (payload: { file: File, blob: Blob, base64Body: string }) => Promise<void>,
-     *   errorMessage?: string
+     *     inputSelector: string;
+     *     aspectRatio: number;
+     *     beforeCrop?: (file: File) => void;
+     *     upload: (payload: { file: File; blob: Blob; base64Body: string }) => Promise<void>;
+     *     errorMessage?: string;
      * }} options
      */
     function openImageUploadFlow(
@@ -892,7 +875,6 @@
     }
 
     /**
-     *
      * @param e
      */
     function onFileChangeGallery(e) {
@@ -905,49 +887,11 @@
         });
     }
 
-    /**
-     *
-     */
     function displayGalleryUpload() {
         triggerFileInput('GalleryUploadButton');
     }
 
     /**
-     *
-     * @param fileId
-     */
-    function setProfilePicOverride(fileId) {
-        if (!isLocalUserVrcPlusSupporter.value) {
-            toast.error(t('message.vrcplus.required'));
-            return;
-        }
-        let profilePicOverride = '';
-        if (fileId) {
-            profilePicOverride = `${AppDebug.endpointDomain}/file/${fileId}/1`;
-        }
-        if (profilePicOverride === currentUser.value.profilePicOverride) {
-            return;
-        }
-        userRequest
-            .saveCurrentUser({
-                profilePicOverride
-            })
-            .then((args) => {
-                toast.success(t('message.gallery.profile_pic_changed'));
-                return args;
-            });
-    }
-
-    /**
-     *
-     * @param fileId
-     */
-    function compareCurrentProfilePic(fileId) {
-        return isCurrentFile(currentUser.value.profilePicOverride, fileId);
-    }
-
-    /**
-     *
      * @param fileId
      */
     function deleteGalleryImage(fileId) {
@@ -961,7 +905,6 @@
         }
     }
     /**
-     *
      * @param e
      */
     function onFileChangeVRCPlusIcon(e) {
@@ -975,18 +918,14 @@
         });
     }
 
-    /**
-     *
-     */
     function displayVRCPlusIconUpload() {
         triggerFileInput('VRCPlusIconUploadButton');
     }
 
     /**
-     *
      * @param fileId
      */
-    function setVRCPlusIcon(fileId) {
+    function setUserIcon(fileId) {
         if (!isLocalUserVrcPlusSupporter.value) {
             toast.error(t('message.vrcplus.required'));
             return;
@@ -995,29 +934,26 @@
         if (fileId) {
             userIcon = `${AppDebug.endpointDomain}/file/${fileId}/1`;
         }
-        if (userIcon === currentUser.value.userIcon) {
+        if (userIcon === currentUser.value.iconUrl) {
             return;
         }
         userRequest
-            .saveCurrentUser({
+            .saveProfile({
                 userIcon
             })
-            .then((args) => {
+            .then(() => {
                 toast.success(t('message.gallery.profile_icon_changed'));
-                return args;
             });
     }
 
     /**
-     *
      * @param userIcon
      */
     function compareCurrentVRCPlusIcon(userIcon) {
-        return isCurrentFile(currentUser.value.userIcon, userIcon);
+        return isCurrentFile(currentUser.value.iconUrl, userIcon);
     }
 
     /**
-     *
      * @param fileId
      */
     function deleteVRCPlusIcon(fileId) {
@@ -1025,7 +961,6 @@
     }
 
     /**
-     *
      * @param fileName
      */
     function parseEmojiFileName(fileName) {
@@ -1071,7 +1006,6 @@
     }
 
     /**
-     *
      * @param e
      */
     function onFileChangeEmoji(e) {
@@ -1088,15 +1022,11 @@
         });
     }
 
-    /**
-     *
-     */
     function displayEmojiUpload() {
         triggerFileInput('EmojiUploadButton');
     }
 
     /**
-     *
      * @param fileId
      */
     function deleteEmoji(fileId) {
@@ -1113,7 +1043,6 @@
     }
 
     /**
-     *
      * @param e
      */
     function onFileChangeSticker(e) {
@@ -1126,15 +1055,11 @@
         });
     }
 
-    /**
-     *
-     */
     function displayStickerUpload() {
         triggerFileInput('StickerUploadButton');
     }
 
     /**
-     *
      * @param fileId
      */
     function deleteSticker(fileId) {
@@ -1156,7 +1081,6 @@
     }
 
     /**
-     *
      * @param e
      */
     function onFileChangePrint(e) {
@@ -1172,21 +1096,33 @@
         });
     }
 
-    /**
-     *
-     */
     function displayPrintUpload() {
         triggerFileInput('PrintUploadButton');
     }
 
     /**
-     *
      * @param printId
      */
     function deletePrint(printId) {
+        if (favoritePrintIds.value.has(printId)) {
+            toast.warning('This print is in your favorites', {
+                description: 'Please remove it from your favorites before deleting it.'
+            });
+            return;
+        }
         vrcPlusImageRequest.deletePrint(printId).then((args) => {
             removeItemById(printTable.value, args.printId);
         });
+    }
+
+    async function toggleFavoritePrint(printId) {
+        if (favoritePrintIds.value.has(printId)) {
+            await database.removePrintFromFavorites(printId);
+            favoritePrintIds.value.delete(printId);
+        } else {
+            await database.addPrintToFavorites(printId);
+            favoritePrintIds.value.add(printId);
+        }
     }
 
     async function handleDropGallery(event) {
@@ -1248,7 +1184,6 @@
     }
 
     /**
-     *
      * @param inventoryId
      */
     async function consumeInventoryBundle(inventoryId) {
@@ -1275,9 +1210,6 @@
         // inventoryItemsCreated: 0
     }
 
-    /**
-     *
-     */
     async function redeemReward() {
         modalStore
             .prompt({

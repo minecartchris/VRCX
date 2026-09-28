@@ -16,12 +16,9 @@ export function useSearchGroup() {
     const searchGroupResults = ref([]);
     const isSearchGroupLoading = ref(false);
 
-    /**
-     *
-     */
     async function searchGroup() {
         searchGroupParams.value = {
-            n: 10,
+            n: 60,
             offset: 0,
             query: replaceBioSymbols(searchText.value)
         };
@@ -29,7 +26,6 @@ export function useSearchGroup() {
     }
 
     /**
-     *
      * @param go
      */
     async function moreSearchGroup(go) {
@@ -56,9 +52,6 @@ export function useSearchGroup() {
             });
     }
 
-    /**
-     *
-     */
     function clearGroupSearch() {
         searchGroupParams.value = {};
         searchGroupResults.value = [];
