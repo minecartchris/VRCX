@@ -2,6 +2,7 @@ import { activityV2 } from './activityV2.js';
 import { avatarFavorites } from './avatarFavorites.js';
 import { avatarTags } from './avatarTags.js';
 import { feed } from './feed.js';
+import { feedHistory } from './feedHistory.js';
 import { friendFavorites } from './friendFavorites.js';
 import { friendLogCurrent } from './friendLogCurrent.js';
 import { friendLogHistory } from './friendLogHistory.js';
@@ -27,6 +28,7 @@ const dbVars = {
 
 const database = {
     ...feed,
+    ...feedHistory,
     ...activityV2,
     ...gameLog,
     ...notifications,
@@ -83,6 +85,7 @@ const database = {
         await sqliteService.executeNonQuery(
             `CREATE INDEX IF NOT EXISTS ${dbVars.userPrefix}_feed_plugin_created_idx ON ${dbVars.userPrefix}_feed_plugin (created_at)`
         );
+        await feedHistory.createFeedHistoryIndexes();
         await sqliteService.executeNonQuery(
             `CREATE TABLE IF NOT EXISTS ${dbVars.userPrefix}_activity_sync_state_v2 (
                 user_id TEXT PRIMARY KEY,

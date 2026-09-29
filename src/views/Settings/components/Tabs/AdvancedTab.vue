@@ -270,11 +270,41 @@
             </div>
         </SettingsGroup>
 
+        <SettingsGroup :title="t('view.settings.advanced.advanced.feed_history.header')">
+            <SettingsItem
+                :label="t('view.settings.advanced.advanced.feed_history.keep_forever')"
+                :description="t('view.settings.advanced.advanced.feed_history.keep_forever_description')"
+                toggle>
+                <Switch
+                    :model-value="feedKeepForever"
+                    :ariaLabel="t('view.settings.advanced.advanced.feed_history.keep_forever')"
+                    @update:modelValue="setFeedKeepForever" />
+            </SettingsItem>
+
+            <SettingsItem
+                :label="t('view.settings.advanced.advanced.feed_history.delete')"
+                :description="t('view.settings.advanced.advanced.feed_history.delete_description')">
+                <Button size="sm" variant="outline" @click="isFeedHistoryDeleteDialogOpen = true">
+                    <Trash2 class="h-4 w-4 mr-1" />
+                    {{ t('view.settings.advanced.advanced.feed_history.delete_button') }}
+                </Button>
+            </SettingsItem>
+        </SettingsGroup>
+
+        <FeedHistoryDeleteDialog v-model:open="isFeedHistoryDeleteDialogOpen" />
+
         <SettingsGroup :title="t('view.settings.advanced.advanced.database_cleanup.header')">
             <SettingsItem
                 :label="t('view.settings.advanced.advanced.database_cleanup.auto_cleanup')"
-                :description="t('view.settings.advanced.advanced.database_cleanup.auto_cleanup_description')">
-                <Select :model-value="avatarAutoCleanup" @update:modelValue="setAvatarAutoCleanup">
+                :description="
+                    feedKeepForever
+                        ? t('view.settings.advanced.advanced.feed_history.auto_cleanup_paused')
+                        : t('view.settings.advanced.advanced.database_cleanup.auto_cleanup_description')
+                ">
+                <Select
+                    :model-value="avatarAutoCleanup"
+                    :disabled="feedKeepForever"
+                    @update:modelValue="setAvatarAutoCleanup">
                     <SelectTrigger class="w-36">
                         <SelectValue />
                     </SelectTrigger>
@@ -454,6 +484,7 @@
     import { clearVRCXCache } from '@/coordinators/vrcxCoordinator';
     import { openExternalLink } from '@/shared/utils';
 
+    import FeedHistoryDeleteDialog from '@/components/dialogs/FeedHistoryDeleteDialog.vue';
     import PhotonSettings from '../PhotonSettings.vue';
     import RegistryBackupDialog from '../../../Tools/dialogs/RegistryBackupDialog.vue';
     import SettingsGroup from '../SettingsGroup.vue';
@@ -495,6 +526,7 @@
         gameLogDisabled,
         sqliteTableSizes,
         avatarAutoCleanup,
+        feedKeepForever,
         purgeInProgress,
         sentryErrorReporting
     } = storeToRefs(advancedSettingsStore);
@@ -510,6 +542,7 @@
         setShowConfirmationOnSwitchAvatar,
         getSqliteTableSizes,
         setAvatarAutoCleanup,
+        setFeedKeepForever,
         purgeAvatarFeedData,
         promptAutoClearVRCXCacheFrequency,
         setSentryErrorReporting
@@ -519,6 +552,7 @@
     const visits = ref(null);
     const selectedPurgePeriod = ref('180');
     const isPurgeDialogVisible = ref(false);
+    const isFeedHistoryDeleteDialogOpen = ref(false);
 
     const cacheSize = reactive({
         cachedUsers: 0,

@@ -59,6 +59,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
     const gameLogDisabled = ref(false);
     const sqliteTableSizes = ref({});
     const avatarAutoCleanup = ref('Off');
+    const feedKeepForever = ref(true);
     const purgeInProgress = ref(false);
     const ugcFolderPath = ref('');
     const autoDeleteOldPrints = ref(false);
@@ -110,6 +111,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
             showConfirmationOnSwitchAvatarConfig,
             gameLogDisabledConfig,
             avatarAutoCleanupConfig,
+            feedKeepForeverConfig,
             ugcFolderPathConfig,
             autoDeleteOldPrintsConfig,
             notificationOpacityConfig,
@@ -147,6 +149,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
             configRepository.getBool('VRCX_showConfirmationOnSwitchAvatar', false),
             configRepository.getBool('VRCX_gameLogDisabled', false),
             configRepository.getString('VRCX_avatarAutoCleanup', 'Off'),
+            configRepository.getBool('VRCX_feedKeepForever', true),
             configRepository.getString('VRCX_userGeneratedContentPath', ''),
             configRepository.getBool('VRCX_autoDeleteOldPrints', false),
             configRepository.getFloat('VRCX_notificationOpacity', 100),
@@ -190,6 +193,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
         showConfirmationOnSwitchAvatar.value = showConfirmationOnSwitchAvatarConfig;
         gameLogDisabled.value = gameLogDisabledConfig;
         avatarAutoCleanup.value = avatarAutoCleanupConfig;
+        feedKeepForever.value = feedKeepForeverConfig;
         ugcFolderPath.value = ugcFolderPathConfig;
         autoDeleteOldPrints.value = autoDeleteOldPrintsConfig;
         notificationOpacity.value = notificationOpacityConfig;
@@ -426,6 +430,16 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
     }
 
     /**
+     * While on, feed entries are never deleted automatically; only the Delete Feed Data dialog removes them.
+     *
+     * @param {boolean} value
+     */
+    async function setFeedKeepForever(value) {
+        feedKeepForever.value = Boolean(value);
+        await configRepository.setBool('VRCX_feedKeepForever', feedKeepForever.value);
+    }
+
+    /**
      * @param {number | null} days - Number of days to keep. Null means delete all.
      */
     async function purgeAvatarFeedData(days) {
@@ -466,6 +480,8 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
      * @param {string} userId - Current user ID for per-user cleanup tracking.
      */
     async function runAvatarAutoCleanup(userId) {
+        if (await configRepository.getBool('VRCX_feedKeepForever', true)) return;
+
         const cleanupSetting = await configRepository.getString('VRCX_avatarAutoCleanup', 'Off');
         if (cleanupSetting === 'Off') return;
 
@@ -939,6 +955,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
         gameLogDisabled,
         sqliteTableSizes,
         avatarAutoCleanup,
+        feedKeepForever,
         purgeInProgress,
         ugcFolderPath,
         currentUserInventory,
@@ -980,6 +997,7 @@ export const useAdvancedSettingsStore = defineStore('AdvancedSettings', () => {
         setShowConfirmationOnSwitchAvatar,
         setGameLogDisabled,
         setAvatarAutoCleanup,
+        setFeedKeepForever,
         purgeAvatarFeedData,
         runAvatarAutoCleanup,
         setUGCFolderPath,

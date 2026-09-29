@@ -89,13 +89,15 @@ const feed = {
      * @param {string} [dateFrom] ISO date string
      * @param {string} [dateTo] ISO date string
      * @param {number} [maxEntries]
-     * @returns {Promise<object[]>} newest first
+     * @param {string[]} [vipList] Only entries about these users; empty means everyone
+     * @returns {Promise<object[]>} Newest first
      */
     async lookupPluginFeedDatabase(
         search = '',
         dateFrom = '',
         dateTo = '',
-        maxEntries = dbVars.maxTableSize
+        maxEntries = dbVars.maxTableSize,
+        vipList = []
     ) {
         const args = { '@limit': maxEntries };
         let where = '1=1';
@@ -103,6 +105,15 @@ const feed = {
             where +=
                 ' AND (message LIKE @searchLike OR detail LIKE @searchLike OR plugin_name LIKE @searchLike OR display_name LIKE @searchLike)';
             args['@searchLike'] = `%${search}%`;
+        }
+        // Filtered here rather than after the LIMIT, so a page of entries about
+        // other people cannot crowd out the favourites' entries.
+        if (vipList.length > 0) {
+            const placeholders = vipList.map((vip, i) => {
+                args[`@vip_${i}`] = vip;
+                return `@vip_${i}`;
+            });
+            where += ` AND user_id IN (${placeholders.join(', ')})`;
         }
         if (dateFrom) {
             where += ' AND created_at >= @dateFrom';
@@ -136,7 +147,8 @@ const feed = {
     },
 
     /**
-     * @param {string|null} cutoffDate - ISO date string. Deletes records older than this date. If null, deletes all records.
+     * @param {string | null} cutoffDate - ISO date string. Deletes records older than this date. If null, deletes all
+     *   records.
      */
     async purgePluginFeedData(cutoffDate) {
         if (cutoffDate) {
@@ -147,9 +159,7 @@ const feed = {
                 }
             );
         } else {
-            await sqliteService.executeNonQuery(
-                `DELETE FROM ${dbVars.userPrefix}_feed_plugin`
-            );
+            await sqliteService.executeNonQuery(`DELETE FROM ${dbVars.userPrefix}_feed_plugin`);
         }
     },
 

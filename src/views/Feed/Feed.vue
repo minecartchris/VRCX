@@ -82,43 +82,75 @@
                         style="flex: 0.4"
                         @keyup.enter="feedTableLookup"
                         @change="feedTableLookup" />
+                    <TooltipWrapper side="bottom" :content="t('view.feed.history.delete')">
+                        <Button
+                            variant="outline"
+                            size="icon-sm"
+                            class="ml-2 shrink-0"
+                            :aria-label="t('view.feed.history.delete')"
+                            data-testid="feed-history-delete"
+                            @click="isDeleteDialogOpen = true">
+                            <Trash2 />
+                        </Button>
+                    </TooltipWrapper>
                 </div>
             </template>
         </DataTableLayout>
+        <div
+            v-if="feedHasOlder"
+            class="mt-2 flex shrink-0 items-center justify-center gap-3 text-xs text-muted-foreground"
+            data-testid="feed-history-footer">
+            <span>{{ t('view.feed.history.showing', { count: totalItems.toLocaleString() }) }}</span>
+            <Button
+                variant="outline"
+                size="sm"
+                :disabled="feedLoadingOlder || feedTable.loading"
+                data-testid="feed-load-older"
+                @click="handleLoadOlder">
+                <Spinner v-if="feedLoadingOlder" />
+                <History v-else />
+                {{ feedLoadingOlder ? t('view.feed.history.loading_older') : t('view.feed.history.load_older') }}
+            </Button>
+        </div>
+        <FeedHistoryDeleteDialog v-model:open="isDeleteDialogOpen" />
     </div>
 </template>
 
 <script setup>
     import { computed, ref } from 'vue';
-    import { ListFilter, Star } from 'lucide-vue-next';
+    import { History, ListFilter, Star, Trash2 } from 'lucide-vue-next';
     import { getLocalTimeZone, today } from '@internationalized/date';
     import { storeToRefs } from 'pinia';
+    import { toast } from 'vue-sonner';
     import { useI18n } from 'vue-i18n';
 
     import dayjs from 'dayjs';
 
     import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
-    import { useAppearanceSettingsStore, useFeedStore, useVrcxStore } from '../../stores';
+    import { useAppearanceSettingsStore, useFeedStore } from '../../stores';
     import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
     import { Badge } from '../../components/ui/badge';
     import { Button } from '../../components/ui/button';
     import { DataTableLayout } from '../../components/ui/data-table';
     import { InputGroupField } from '../../components/ui/input-group';
     import { RangeCalendar } from '../../components/ui/range-calendar';
+    import { Spinner } from '../../components/ui/spinner';
     import { Toggle } from '../../components/ui/toggle';
     import { columns as baseColumns } from './columns.jsx';
     import { useVrcxVueTable } from '../../lib/table/useVrcxVueTable';
 
-    const { feedTable, feedTableData } = storeToRefs(useFeedStore());
-    const { feedTableLookup } = useFeedStore();
+    import FeedHistoryDeleteDialog from '../../components/dialogs/FeedHistoryDeleteDialog.vue';
+
+    const { feedTable, feedTableData, feedTableLimit, feedHasOlder, feedLoadingOlder } = storeToRefs(useFeedStore());
+    const { feedTableLookup, loadOlderFeed } = useFeedStore();
     const appearanceSettingsStore = useAppearanceSettingsStore();
     const { weekStartsOn } = storeToRefs(appearanceSettingsStore);
-    const vrcxStore = useVrcxStore();
 
     const { t, locale } = useI18n();
     const feedFilterTypes = ['GPS', 'Online', 'Offline', 'Status', 'Avatar', 'Bio', 'Plugin'];
 
     const popoverOpen = ref(false);
+    const isDeleteDialogOpen = ref(false);
     const todayDate = today(getLocalTimeZone());
     const dateRange = ref(undefined);
     const hasDateFilter = computed(() => !!(feedTable.value.dateFrom || feedTable.value.dateTo));
@@ -192,9 +224,20 @@
 
     const totalItems = computed(() => {
         const length = table.getFilteredRowModel().rows.length;
-        const max = vrcxStore.maxTableSize;
-        return length > max && length < max + 51 ? max : length;
+        const max = feedTableLimit.value;
+        // Holding the count at the limit hides up to 50 of the oldest rows, which is only fine while "Load older
+        // entries" is there to bring them back.
+        return feedHasOlder.value && length > max && length < max + 51 ? max : length;
     });
+
+    async function handleLoadOlder() {
+        try {
+            await loadOlderFeed();
+        } catch (err) {
+            console.error('[feed] failed to load older entries', err);
+            toast.error(t('view.feed.history.load_older_failed', { error: String(err?.message ?? err) }));
+        }
+    }
 
     const handlePageSizeChange = (size) => {
         pagination.value = {

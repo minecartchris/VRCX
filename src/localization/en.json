@@ -264,6 +264,13 @@
         "feed": {
             "favorites_only_tooltip": "Filter favorites only",
             "search_placeholder": "Search",
+            "history": {
+                "showing": "Showing the newest {count} entries. Older entries are still saved.",
+                "load_older": "Load older entries",
+                "loading_older": "Loading...",
+                "load_older_failed": "Could not load older entries: {error}",
+                "delete": "Delete feed data"
+            },
             "filters": {
                 "GPS": "GPS",
                 "Online": "Online",
@@ -1264,6 +1271,15 @@
                         "portal_spawn": "Portal Spawn:",
                         "video_play": "Video Play:",
                         "event": "Event:"
+                    },
+                    "feed_history": {
+                        "header": "Feed History",
+                        "keep_forever": "Keep feed history forever",
+                        "keep_forever_description": "Feed entries are never deleted automatically. They stay until you delete them yourself.",
+                        "delete": "Delete Feed Data",
+                        "delete_description": "Choose which feed entries to permanently delete",
+                        "delete_button": "Delete...",
+                        "auto_cleanup_paused": "Paused while \"Keep feed history forever\" is on"
                     },
                     "database_cleanup": {
                         "header": "Database Cleanup",
@@ -2606,6 +2622,31 @@
             "everyone": "Everyone",
             "reset": "Reset",
             "close": "Close"
+        },
+        "feed_history_delete": {
+            "header": "Delete Feed Data",
+            "description": "Permanently delete saved feed entries. Charts > Hot Worlds uses GPS entries and loses the deleted period right away. Friends’ Activity charts use Online and Offline entries: charts already built keep their data until refreshed, then lose the deleted period too.",
+            "warning": "Deleted entries cannot be recovered. Back up your database file first if you might want them later.",
+            "types": "Feed types",
+            "older_than": "Delete entries older than",
+            "period": {
+                "30": "30 days",
+                "90": "90 days",
+                "180": "6 months",
+                "365": "1 year",
+                "730": "2 years",
+                "all": "Any age"
+            },
+            "counting": "Counting saved entries...",
+            "count_failed": "Could not count the saved entries.",
+            "no_types": "Pick at least one feed type.",
+            "nothing": "No saved entries match, so nothing will be deleted.",
+            "summary": "Entries that will be permanently deleted: {count}",
+            "confirm": "Delete",
+            "deleting": "Deleting...",
+            "done": "Deleted {count} feed entries.",
+            "failed": "Could not delete feed data: {error}",
+            "partial": "Deleted {count} entries, then stopped: {error}"
         },
         "previous_instances": {
             "header": "Previous Instances",
