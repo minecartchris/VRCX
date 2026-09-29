@@ -106,6 +106,13 @@
                                     :ariaLabel="t('side_panel.settings.split_favorite_friends')"
                                     @update:modelValue="setIsSidebarDivideByFriendGroup" />
                             </Field>
+                            <Field orientation="horizontal">
+                                <FieldLabel>{{ t('view.settings.appearance.appearance.show_cosmetics') }}</FieldLabel>
+                                <Switch
+                                    :model-value="sidebarCosmetics"
+                                    :ariaLabel="t('view.settings.appearance.appearance.show_cosmetics')"
+                                    @update:modelValue="setSidebarCosmetics" />
+                            </Field>
 
                             <Separator />
 
@@ -355,7 +362,8 @@
         useFriendStore,
         useGroupStore,
         useNotificationStore,
-        useNotificationsSettingsStore
+        useNotificationsSettingsStore,
+        useVrStore
     } from '../../stores';
     import { runRefreshFriendsListFlow } from '../../coordinators/friendSyncCoordinator';
     import { normalizeFavoriteGroupsChange, resolveFavoriteGroups } from './sidebarSettingsUtils';
@@ -372,6 +380,7 @@
     const notificationStore = useNotificationStore();
     const { isNotificationCenterOpen, hasUnseenNotifications } = storeToRefs(notificationStore);
     const { notificationLayout } = storeToRefs(useNotificationsSettingsStore());
+    const { saveOpenVROption } = useVrStore();
     const quickSearchStore = useQuickSearchStore();
     const { t } = useI18n();
 
@@ -382,16 +391,10 @@
     whenever(keys['Meta+k'], () => openQuickSearch());
     whenever(keys['Ctrl+k'], () => openQuickSearch());
 
-    /**
-     *
-     */
     function openQuickSearch() {
         quickSearchStore.open();
     }
 
-    /**
-     *
-     */
     function markNotificationsRead() {
         notificationStore.markAllAsSeen();
     }
@@ -405,7 +408,8 @@
         isHideFriendsInSameInstance,
         isSameInstanceAboveFavorites,
         isSidebarDivideByFriendGroup,
-        sidebarFavoriteGroups
+        sidebarFavoriteGroups,
+        sidebarCosmetics
     } = storeToRefs(appearanceSettingsStore);
     const {
         setSidebarSortMethod1,
@@ -415,7 +419,8 @@
         setIsHideFriendsInSameInstance,
         setIsSameInstanceAboveFavorites,
         setIsSidebarDivideByFriendGroup,
-        setSidebarFavoriteGroups
+        setSidebarFavoriteGroups,
+        setSidebarCosmetics
     } = appearanceSettingsStore;
 
     const favoriteStore = useFavoriteStore();
@@ -434,7 +439,6 @@
     );
 
     /**
-     *
      * @param value
      */
     function handleFavoriteGroupsChange(value) {

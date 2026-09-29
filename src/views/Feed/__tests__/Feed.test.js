@@ -6,11 +6,15 @@ const mocks = vi.hoisted(() => ({
     feedTable: null,
     feedTableData: null,
     feedTableLookup: vi.fn(),
+    loadOlderFeed: vi.fn(),
+    feedTableLimit: null,
+    feedHasOlder: null,
+    feedLoadingOlder: null,
+    toastError: vi.fn(),
     pagination: null,
     filteredRows: [{ id: 'r1' }],
     tablePageSizes: [10, 25, 50],
-    tablePageSize: 25,
-    maxTableSize: 100
+    tablePageSize: 25
 }));
 
 mocks.feedTable = mocks.makeRef({
@@ -22,6 +26,9 @@ mocks.feedTable = mocks.makeRef({
     dateTo: ''
 });
 mocks.feedTableData = mocks.makeRef([]);
+mocks.feedTableLimit = mocks.makeRef(100);
+mocks.feedHasOlder = mocks.makeRef(false);
+mocks.feedLoadingOlder = mocks.makeRef(false);
 mocks.pagination = mocks.makeRef({
     pageIndex: 2,
     pageSize: 10
@@ -33,9 +40,13 @@ vi.mock('pinia', () => ({
 
 vi.mock('vue-i18n', () => ({
     useI18n: () => ({
-        t: (key) => key,
+        t: (key, params) => (params ? `${key} ${JSON.stringify(params)}` : key),
         locale: { value: 'en-US' }
     })
+}));
+
+vi.mock('vue-sonner', () => ({
+    toast: { error: (...args) => mocks.toastError(...args) }
 }));
 
 vi.mock('@internationalized/date', () => ({
@@ -47,15 +58,27 @@ vi.mock('../../../stores', () => ({
     useFeedStore: () => ({
         feedTable: mocks.feedTable,
         feedTableData: mocks.feedTableData,
-        feedTableLookup: mocks.feedTableLookup
+        feedTableLimit: mocks.feedTableLimit,
+        feedHasOlder: mocks.feedHasOlder,
+        feedLoadingOlder: mocks.feedLoadingOlder,
+        feedTableLookup: mocks.feedTableLookup,
+        loadOlderFeed: mocks.loadOlderFeed
     }),
     useAppearanceSettingsStore: () => ({
         tablePageSizes: mocks.tablePageSizes,
         tablePageSize: mocks.tablePageSize
-    }),
-    useVrcxStore: () => ({
-        maxTableSize: mocks.maxTableSize
     })
+}));
+
+vi.mock('../../../components/dialogs/FeedHistoryDeleteDialog.vue', () => ({
+    default: {
+        props: ['open'],
+        template: '<div data-testid="delete-dialog" :data-open="String(open)" />'
+    }
+}));
+
+vi.mock('../../../components/ui/spinner', () => ({
+    Spinner: { template: '<span />' }
 }));
 
 vi.mock('../../../lib/table/useVrcxVueTable', () => ({
@@ -85,8 +108,9 @@ vi.mock('../../../components/ui/data-table', () => ({
 
 vi.mock('../../../components/ui/button', () => ({
     Button: {
+        props: ['disabled'],
         emits: ['click'],
-        template: '<button @click="$emit(\'click\')"><slot /></button>'
+        template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>'
     }
 }));
 
@@ -151,16 +175,16 @@ vi.mock('../../../components/ui/tooltip', () => ({
 }));
 
 vi.mock('lucide-vue-next', () => ({
+    History: { template: '<span />' },
     ListFilter: { template: '<span />' },
-    Star: { template: '<span />' }
+    Star: { template: '<span />' },
+    Trash2: { template: '<span />' }
 }));
 
 import Feed from '../Feed.vue';
 
 function clickButtonByText(wrapper, text) {
-    const button = wrapper
-        .findAll('button')
-        .find((node) => node.text().includes(text));
+    const button = wrapper.findAll('button').find((node) => node.text().includes(text));
     if (!button) {
         throw new Error(`Cannot find button with text: ${text}`);
     }
@@ -179,9 +203,13 @@ describe('Feed.vue', () => {
         };
         mocks.feedTableData.value = [];
         mocks.feedTableLookup.mockReset();
+        mocks.loadOlderFeed.mockReset();
+        mocks.toastError.mockReset();
+        mocks.feedTableLimit.value = 100;
+        mocks.feedHasOlder.value = false;
+        mocks.feedLoadingOlder.value = false;
         mocks.pagination.value = { pageIndex: 2, pageSize: 10 };
         mocks.filteredRows = [{ id: 'r1' }];
-        mocks.maxTableSize = 100;
     });
 
     test('applies date filter from calendar and triggers lookup', async () => {
@@ -234,10 +262,74 @@ describe('Feed.vue', () => {
 
     test('caps total items when table length is slightly above max table size', () => {
         mocks.filteredRows = Array.from({ length: 120 }, (_, i) => ({ id: i }));
-        mocks.maxTableSize = 100;
+        mocks.feedTableLimit.value = 100;
+        mocks.feedHasOlder.value = true;
         const wrapper = mount(Feed);
 
         expect(wrapper.get('[data-testid="total-items"]').text()).toBe('100');
+    });
+
+    test('follows the limit once older entries have grown it', () => {
+        mocks.filteredRows = Array.from({ length: 1030 }, (_, i) => ({ id: i }));
+        mocks.feedTableLimit.value = 1000;
+        mocks.feedHasOlder.value = true;
+        const wrapper = mount(Feed);
+
+        expect(wrapper.get('[data-testid="total-items"]').text()).toBe('1000');
+    });
+
+    test('shows every row once there is nothing left to load', () => {
+        mocks.filteredRows = Array.from({ length: 1005 }, (_, i) => ({ id: i }));
+        mocks.feedTableLimit.value = 1000;
+        mocks.feedHasOlder.value = false;
+        const wrapper = mount(Feed);
+
+        expect(wrapper.get('[data-testid="total-items"]').text()).toBe('1005');
+    });
+
+    test('hides the load older footer when there is nothing older', () => {
+        const wrapper = mount(Feed);
+
+        expect(wrapper.find('[data-testid="feed-history-footer"]').exists()).toBe(false);
+    });
+
+    test('loads older entries from the footer', async () => {
+        mocks.feedHasOlder.value = true;
+        mocks.filteredRows = Array.from({ length: 100 }, (_, i) => ({ id: i }));
+        const wrapper = mount(Feed);
+
+        const footer = wrapper.get('[data-testid="feed-history-footer"]');
+        expect(footer.text()).toContain('"count":"100"');
+
+        await wrapper.get('[data-testid="feed-load-older"]').trigger('click');
+        expect(mocks.loadOlderFeed).toHaveBeenCalledTimes(1);
+    });
+
+    test('disables the load older button while a page is loading', () => {
+        mocks.feedHasOlder.value = true;
+        mocks.feedLoadingOlder.value = true;
+        const wrapper = mount(Feed);
+
+        expect(wrapper.get('[data-testid="feed-load-older"]').attributes('disabled')).toBeDefined();
+    });
+
+    test('reports a failed page instead of throwing', async () => {
+        mocks.feedHasOlder.value = true;
+        mocks.loadOlderFeed.mockRejectedValue(new Error('disk'));
+        const wrapper = mount(Feed);
+
+        await wrapper.get('[data-testid="feed-load-older"]').trigger('click');
+        await Promise.resolve();
+
+        expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('view.feed.history.load_older_failed'));
+    });
+
+    test('opens the delete dialog from the toolbar', async () => {
+        const wrapper = mount(Feed);
+
+        expect(wrapper.get('[data-testid="delete-dialog"]').attributes('data-open')).toBe('false');
+        await wrapper.get('[data-testid="feed-history-delete"]').trigger('click');
+        expect(wrapper.get('[data-testid="delete-dialog"]').attributes('data-open')).toBe('true');
     });
 
     test('builds stable row id fallback for rows without id', () => {
@@ -251,8 +343,6 @@ describe('Feed.vue', () => {
             message: 'hello'
         });
 
-        expect(key).toBe(
-            'Online:2026-03-01T00:00:00.000Z:usr_123:wrld_abc:hello'
-        );
+        expect(key).toBe('Online:2026-03-01T00:00:00.000Z:usr_123:wrld_abc:hello');
     });
 });

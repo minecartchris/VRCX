@@ -8,6 +8,12 @@ export const entityQueryPolicies = Object.freeze({
         retry: 1,
         refetchOnWindowFocus: false
     }),
+    profile: Object.freeze({
+        staleTime: 20 * SECOND,
+        gcTime: 90 * SECOND,
+        retry: 1,
+        refetchOnWindowFocus: false
+    }),
     avatar: Object.freeze({
         staleTime: 60 * SECOND,
         gcTime: 300 * SECOND,
@@ -113,8 +119,8 @@ export const entityQueryPolicies = Object.freeze({
 });
 
 /**
- * @param {{staleTime: number, gcTime: number, retry: number, refetchOnWindowFocus: boolean}} policy
- * @returns {{staleTime: number, gcTime: number, retry: number, refetchOnWindowFocus: boolean}}
+ * @param {{ staleTime: number; gcTime: number; retry: number; refetchOnWindowFocus: boolean }} policy
+ * @returns {{ staleTime: number; gcTime: number; retry: number; refetchOnWindowFocus: boolean }}
  */
 export function toQueryOptions(policy) {
     return {

@@ -142,6 +142,9 @@
     const dialogClass = computed(() => {
         switch (activeType.value) {
             case 'user':
+            case 'group':
+            case 'world':
+            case 'avatar':
                 return 'x-dialog translate-y-0 sm:max-w-270 overflow-hidden flex flex-col';
             case 'group-member-moderation':
                 return 'x-dialog translate-y-0 max-w-none flex flex-col sm:min-w-[90vw] sm:max-w-[90vw] sm:min-h-[80vh] sm:max-h-[80vh]';
@@ -150,9 +153,6 @@
             case 'previous-instances-world':
             case 'previous-instances-group':
                 return 'x-dialog translate-y-0 sm:max-w-250';
-            case 'world':
-            case 'avatar':
-            case 'group':
             default:
                 return 'x-dialog translate-y-0 sm:max-w-235 overflow-hidden flex flex-col';
         }
@@ -179,7 +179,7 @@
     }
 
     const dialogStyle = computed(() => {
-        if (activeType.value !== 'user') {
+        if (activeType.value !== 'user' || !appearanceSettingsStore.displayVRCProfileBackgrounds) {
             return {};
         }
 
@@ -188,6 +188,10 @@
             backgroundClip: 'padding-box'
         };
 
+        const opacity = -appearanceSettingsStore.profileBackgroundOpacity + 1; // Invert the opacity value
+        const textureOverlay = appearanceSettingsStore.isDarkMode
+            ? `rgba(0, 0, 0, ${opacity})`
+            : `rgba(255, 255, 255, ${opacity})`;
         if (userStore.userDialog.publicProfileRef?.backgroundType === 'gradient') {
             const bgTopColor = getReadableProfileThemeColor(
                 `#${userStore.userDialog.publicProfileRef?.backgroundGradientTop}`,
@@ -201,7 +205,7 @@
             );
             return {
                 ...userDialogBaseStyle,
-                backgroundImage: `linear-gradient(180deg, ${bgTopColor}, ${bgBottomColor})`
+                backgroundImage: `linear-gradient(${textureOverlay}, ${textureOverlay}), linear-gradient(180deg, ${bgTopColor}, ${bgBottomColor})`
             };
         }
         if (userStore.userDialog.publicProfileRef?.backgroundType === 'texture') {
@@ -211,10 +215,6 @@
             if (!bg) {
                 return userDialogBaseStyle;
             }
-            const opacity = -appearanceSettingsStore.profileBackgroundOpacity + 1; // Invert the opacity value
-            const textureOverlay = appearanceSettingsStore.isDarkMode
-                ? `rgba(0, 0, 0, ${opacity})`
-                : `rgba(255, 255, 255, ${opacity})`;
             return {
                 ...userDialogBaseStyle,
                 backgroundImage: `linear-gradient(${textureOverlay}, ${textureOverlay}), url(${bg.url})`,
@@ -230,7 +230,9 @@
 <template>
     <Dialog v-if="isOpen" v-model:open="isOpen">
         <DialogContent :class="dialogClass" style="top: 10vh" :show-close-button="false" :style="dialogStyle">
-            <Breadcrumb v-if="shouldShowBreadcrumbs" class="mb-2 flex-shrink-0">
+            <Breadcrumb
+                v-if="shouldShowBreadcrumbs"
+                class="mb-2 flex-shrink-0 rounded-xl bg-(--profile-card) w-fit pr-4">
                 <BreadcrumbList>
                     <TooltipWrapper :content="backCrumbLabel" :disabled="!backCrumbLabel" :delayDuration="500">
                         <Button variant="ghost" size="icon-sm" @click="handleBreadcrumbClick(dialogCrumbs.length - 2)">

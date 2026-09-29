@@ -10,6 +10,7 @@
             <Toaster position="top-center" :theme="theme"></Toaster>
 
             <AlertDialogModal></AlertDialogModal>
+            <OpenExternalLinkDialog></OpenExternalLinkDialog>
             <PromptDialogModal></PromptDialogModal>
             <OtpDialogModal></OtpDialogModal>
             <DatabaseUpgradeDialog></DatabaseUpgradeDialog>
@@ -39,6 +40,7 @@
     import AlertDialogModal from './components/ui/alert-dialog/AlertDialogModal.vue';
     import DatabaseUpgradeDialog from './components/dialogs/DatabaseUpgradeDialog.vue';
     import MacOSTitleBar from './components/MacOSTitleBar.vue';
+    import OpenExternalLinkDialog from './components/dialogs/OpenExternalLinkDialog.vue';
     import OtpDialogModal from './components/ui/dialog/OtpDialogModal.vue';
     import PromptDialogModal from './components/ui/dialog/PromptDialogModal.vue';
     import PluginImportDialog from './views/Settings/components/PluginImportDialog.vue';

@@ -1,37 +1,30 @@
-import {
-    extractFileId,
-    extractFileVersion,
-    extractVariantVersion
-} from './fileUtils';
-import { escapeTag, replaceBioSymbols } from './base/string';
+import { extractFileId, extractFileVersion, extractVariantVersion } from './fileUtils';
+import { replaceBioSymbols } from './base/string';
 import { getFaviconUrl, replaceVrcPackageUrl } from './urlUtils';
 import { AppDebug } from '../../services/appConfig.js';
 import { getAvailablePlatforms } from './platformUtils';
 
 /**
- *
  * @param {string} url
  * @param {number} resolution
  * @param endpointDomain
  * @returns {string}
  */
-function convertFileUrlToImageUrl(
-    url,
-    resolution = 128,
-    endpointDomain = AppDebug.endpointDomain
-) {
+function convertFileUrlToImageUrl(url, resolution = 128, endpointDomain = AppDebug.endpointDomain) {
     if (!url) {
         return '';
     }
     /**
-     * possible patterns?
+     * Possible patterns?
      * /file/file_fileId/version
      * /file/file_fileId/version/
      * /file/file_fileId/version/file
      * /file/file_fileId/version/file/
+     * /image/file_fileId/version/resolution
      */
+    const imagePattern = /image\/file_([a-f0-9-]+)\/(\d+)\/(\d+)\/?$/;
     const pattern = /file\/file_([a-f0-9-]+)\/(\d+)(\/file)?\/?$/;
-    const match = url.match(pattern);
+    const match = url.match(imagePattern) || url.match(pattern);
 
     if (match) {
         const fileId = match[1];
@@ -43,7 +36,6 @@ function convertFileUrlToImageUrl(
 }
 
 /**
- *
  * @param func
  * @param delay
  */
@@ -67,11 +59,7 @@ export {
     openFolderGeneric
 } from './appActions';
 
-export {
-    deleteVRChatCache,
-    checkVRChatCache,
-    getBundleDateSize
-} from '../../coordinators/cacheCoordinator';
+export { deleteVRChatCache, checkVRChatCache, getBundleDateSize } from '../../coordinators/cacheCoordinator';
 
 export {
     getAvailablePlatforms,
