@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
 
-import { filterNewAvatars, formatAge, pickTopAuthors, rankRediscoveries, toTimestamp } from '../recommendations';
+import {
+    extractKeywords,
+    filterNewAvatars,
+    formatAge,
+    interleaveByAuthor,
+    pickKeywords,
+    pickTopAuthors,
+    rankRediscoveries,
+    toTimestamp
+} from '../recommendations';
 
 const NOW = Date.parse('2026-01-01T00:00:00Z');
 const DAY = 86400000;
@@ -160,5 +169,74 @@ describe('formatAge', () => {
         expect(formatAge(12)).toBe('12 days');
         expect(formatAge(60)).toBe('2 months');
         expect(formatAge(400)).toBe('1.1 years');
+    });
+});
+
+describe('pickTopAuthors with no limit', () => {
+    test('returns every author when limit is 0', () => {
+        const history = Array.from({ length: 8 }, (_, i) => entry({ id: `avtr_${i}`, authorId: `usr_${i}` }));
+        expect(pickTopAuthors(history, [], { limit: 0 })).toHaveLength(8);
+    });
+});
+
+describe('extractKeywords', () => {
+    test('keeps descriptive words and drops filler, numbers and platform markers', () => {
+        expect(extractKeywords('Kitsune Fox V2 [Quest] Avatar')).toEqual(['kitsune', 'fox']);
+    });
+
+    test('handles non-latin names', () => {
+        expect(extractKeywords('きつね 狐狸狐')).toEqual(['きつね', '狐狸狐']);
+    });
+
+    test('returns nothing for non-strings', () => {
+        expect(extractKeywords(undefined)).toEqual([]);
+    });
+});
+
+describe('pickKeywords', () => {
+    test('weights words by time worn', () => {
+        const history = [
+            entry({ id: 'avtr_1', name: 'Protogen', timeSpent: 5 * 60000 }),
+            entry({ id: 'avtr_2', name: 'Kitsune', timeSpent: 500 * 60000 })
+        ];
+        expect(pickKeywords(history, [])).toEqual(['kitsune', 'protogen']);
+    });
+
+    test('counts a word once per avatar', () => {
+        const history = [
+            entry({ id: 'avtr_1', name: 'Fox Fox Fox', timeSpent: 10 * 60000 }),
+            entry({ id: 'avtr_2', name: 'Cat', timeSpent: 20 * 60000 })
+        ];
+        expect(pickKeywords(history, [])[0]).toBe('cat');
+    });
+
+    test('uses favorites and their author tags', () => {
+        const favorites = [{ ref: { name: 'Something', tags: ['author_tag_kemono', 'content_sex'] } }];
+        const words = pickKeywords([], favorites);
+        expect(words).toContain('kemono');
+        expect(words).not.toContain('content');
+    });
+
+    test('respects the limit', () => {
+        const history = [entry({ name: 'alpha bravo charlie delta' })];
+        expect(pickKeywords(history, [], { limit: 2 })).toHaveLength(2);
+        expect(pickKeywords(history, [], { limit: 0 })).toHaveLength(4);
+    });
+});
+
+describe('interleaveByAuthor', () => {
+    test('alternates creators while keeping each one in order', () => {
+        const avatars = [
+            { id: 'a1', authorId: 'a' },
+            { id: 'a2', authorId: 'a' },
+            { id: 'a3', authorId: 'a' },
+            { id: 'b1', authorId: 'b' },
+            { id: 'c1', authorId: 'c' }
+        ];
+        expect(interleaveByAuthor(avatars).map((a) => a.id)).toEqual(['a1', 'b1', 'c1', 'a2', 'a3']);
+    });
+
+    test('tolerates junk input', () => {
+        expect(interleaveByAuthor(undefined)).toEqual([]);
     });
 });
