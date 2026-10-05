@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import {
-    filterNewAvatars,
-    formatAge,
-    pickTopAuthors,
-    rankRediscoveries,
-    toTimestamp
-} from '../recommendations';
+import { filterNewAvatars, formatAge, pickTopAuthors, rankRediscoveries, toTimestamp } from '../recommendations';
 
 const NOW = Date.parse('2026-01-01T00:00:00Z');
 const DAY = 86400000;
@@ -45,10 +39,7 @@ describe('toTimestamp', () => {
 describe('rankRediscoveries', () => {
     test('ranks longer-worn avatars first', () => {
         const result = rankRediscoveries(
-            [
-                entry({ id: 'a', timeSpent: 30 * 60000 }),
-                entry({ id: 'b', timeSpent: 600 * 60000 })
-            ],
+            [entry({ id: 'a', timeSpent: 30 * 60000 }), entry({ id: 'b', timeSpent: 600 * 60000 })],
             { now: NOW }
         );
         expect(result.map((r) => r.id)).toEqual(['b', 'a']);
@@ -66,10 +57,7 @@ describe('rankRediscoveries', () => {
     });
 
     test('skips avatars worn too recently to be a rediscovery', () => {
-        const result = rankRediscoveries(
-            [entry({ lastWornAt: new Date(NOW - 2 * DAY).toISOString() })],
-            { now: NOW }
-        );
+        const result = rankRediscoveries([entry({ lastWornAt: new Date(NOW - 2 * DAY).toISOString() })], { now: NOW });
         expect(result).toEqual([]);
     });
 
@@ -123,9 +111,7 @@ describe('pickTopAuthors', () => {
     });
 
     test('reads an author off a nested favorite ref', () => {
-        expect(pickTopAuthors([], [{ ref: { authorId: 'usr_nested' } }])).toEqual([
-            'usr_nested'
-        ]);
+        expect(pickTopAuthors([], [{ ref: { authorId: 'usr_nested' } }])).toEqual(['usr_nested']);
     });
 
     test('excludes your own id', () => {
@@ -136,19 +122,14 @@ describe('pickTopAuthors', () => {
     });
 
     test('respects the limit', () => {
-        const history = Array.from({ length: 20 }, (_, i) =>
-            entry({ authorId: `usr_${i}`, timeSpent: i * 60000 })
-        );
+        const history = Array.from({ length: 20 }, (_, i) => entry({ authorId: `usr_${i}`, timeSpent: i * 60000 }));
         expect(pickTopAuthors(history, [], { limit: 3 })).toHaveLength(3);
     });
 });
 
 describe('filterNewAvatars', () => {
     test('drops avatars you already have', () => {
-        const result = filterNewAvatars(
-            [{ id: 'known' }, { id: 'fresh' }],
-            new Set(['known'])
-        );
+        const result = filterNewAvatars([{ id: 'known' }, { id: 'fresh' }], new Set(['known']));
         expect(result.map((a) => a.id)).toEqual(['fresh']);
     });
 

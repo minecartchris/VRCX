@@ -48,7 +48,7 @@ const avatars = [
 
 /**
  * @param {string} query
- * @returns {string[]} matching ids, in result order
+ * @returns {string[]} Matching ids, in result order
  */
 function ids(query, options) {
     return searchAvatars(avatars, query, options).map((a) => a.id);
@@ -56,10 +56,7 @@ function ids(query, options) {
 
 describe('tokenizeQuery', () => {
     test('keeps parenthesised groups together', () => {
-        expect(tokenizeQuery('tag:any(a, b) cute')).toEqual([
-            'tag:any(a, b)',
-            'cute'
-        ]);
+        expect(tokenizeQuery('tag:any(a, b) cute')).toEqual(['tag:any(a, b)', 'cute']);
     });
 
     test('keeps quoted phrases together', () => {
@@ -91,9 +88,7 @@ describe('parseQuery', () => {
     });
 
     test('parses a bare field as an exact-ish single value', () => {
-        expect(parseQuery('author:someone').fields).toEqual([
-            { field: 'author', mode: 'all', values: ['someone'] }
-        ]);
+        expect(parseQuery('author:someone').fields).toEqual([{ field: 'author', mode: 'all', values: ['someone'] }]);
     });
 
     test('clamps the fuzzy threshold into 0..1', () => {
@@ -110,9 +105,7 @@ describe('parseQuery', () => {
     });
 
     test('defaults a sort without a direction to ascending', () => {
-        expect(parseQuery('sort:name').sorts).toEqual([
-            { field: 'name', direction: 'asc' }
-        ]);
+        expect(parseQuery('sort:name').sorts).toEqual([{ field: 'name', direction: 'asc' }]);
     });
 
     test('ignores an unknown sort field', () => {
@@ -120,10 +113,7 @@ describe('parseQuery', () => {
     });
 
     test('parses similar-to-tags', () => {
-        expect(parseQuery('similar to tags fox, kemono').similarTags).toEqual([
-            'fox',
-            'kemono'
-        ]);
+        expect(parseQuery('similar to tags fox, kemono').similarTags).toEqual(['fox', 'kemono']);
     });
 
     test('treats and/or as joiners rather than search terms', () => {
@@ -156,10 +146,7 @@ describe('searchAvatars', () => {
     });
 
     test('filters by tag with any()', () => {
-        expect(ids('tag:any(protogen, cat_ears)').sort()).toEqual([
-            'avtr_2',
-            'avtr_3'
-        ]);
+        expect(ids('tag:any(protogen, cat_ears)').sort()).toEqual(['avtr_2', 'avtr_3']);
     });
 
     test('filters by tag with all()', () => {
@@ -184,11 +171,7 @@ describe('searchAvatars', () => {
     });
 
     test('applies sort directives ahead of score', () => {
-        expect(ids('sort:name(asc) creator')).toEqual([
-            'avtr_2',
-            'avtr_1',
-            'avtr_3'
-        ]);
+        expect(ids('sort:name(asc) creator')).toEqual(['avtr_2', 'avtr_1', 'avtr_3']);
     });
 
     test('similar-to-tags ranks by tag overlap', () => {
