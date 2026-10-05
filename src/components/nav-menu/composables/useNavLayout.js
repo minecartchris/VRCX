@@ -5,7 +5,7 @@ import configRepository from '../../../services/config';
 import { DASHBOARD_NAV_KEY_PREFIX, isToolNavKey, navDefinitions } from '../../../shared/constants';
 import { triggerNavEntryAction } from '../navActionUtils';
 import { buildMenuItems, findFirstNavEntry, findFirstNavKey } from '../navLayoutHelpers';
-import { createBaseDefaultNavLayout, insertDashboardEntries } from '../navLayoutDefaults';
+import { createBaseDefaultNavLayout, ensureNavEntry, insertDashboardEntries } from '../navLayoutDefaults';
 import { dispatchNavLayoutUpdated, NAV_LAYOUT_UPDATED_EVENT } from '../navLayoutEvents';
 import {
     buildNavDefinitionsForLayout,
@@ -17,6 +17,8 @@ import {
 import { normalizeHiddenKeys, sanitizeLayout } from '../navMenuUtils';
 
 import { useNotificationsSettingsStore } from '../../../stores/settings/notifications';
+
+const PLUGINS_NAV_MIGRATION_KEY = 'VRCX_navPluginsEntryAdded';
 
 export function useNavLayout({ t, locale, router, dashboardStore, dashboards, directAccessPaste, triggerTool }) {
     const navLayout = ref([]);
@@ -190,14 +192,27 @@ export function useNavLayout({ t, locale, router, dashboardStore, dashboards, di
         } catch (error) {
             console.error('Failed to load custom nav', error);
         } finally {
-            const fallbackLayout = layoutData?.length ? layoutData : createDefaultNavLayout();
+            const storedLayout = layoutData?.length ? layoutData : createDefaultNavLayout();
             const normalizedHiddenKeys = normalizeHiddenKeys(hiddenKeysData, navDefinitionMap.value);
+            // Layouts saved before the Plugins entry existed would never show
+            // it, since a stored layout replaces the defaults outright. This
+            // runs once and records that it has: removing the entry afterwards
+            // has to stick, and nothing marks a removed item as hidden.
+            let fallbackLayout = storedLayout;
+            try {
+                if (!(await configRepository.getBool(PLUGINS_NAV_MIGRATION_KEY, false))) {
+                    fallbackLayout = ensureNavEntry(storedLayout, 'plugins', 'search', normalizedHiddenKeys);
+                    await configRepository.setBool(PLUGINS_NAV_MIGRATION_KEY, true);
+                }
+            } catch (error) {
+                console.error('Failed to add the Plugins nav entry', error);
+            }
             const sanitized = sanitizeLayoutLocal(fallbackLayout, normalizedHiddenKeys);
             navLayout.value = sanitized;
             navHiddenKeys.value = normalizedHiddenKeys;
             if (
                 layoutData?.length &&
-                (JSON.stringify(sanitized) !== JSON.stringify(fallbackLayout) ||
+                (JSON.stringify(sanitized) !== JSON.stringify(storedLayout) ||
                     JSON.stringify(normalizedHiddenKeys) !== JSON.stringify(hiddenKeysData))
             ) {
                 await saveNavLayout(sanitized, normalizedHiddenKeys);

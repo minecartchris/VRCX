@@ -37,6 +37,13 @@ const navDefinitions = [
         routeName: 'search'
     },
     {
+        key: 'plugins',
+        icon: 'ri-puzzle-line',
+        tooltip: 'nav_tooltip.plugins',
+        labelKey: 'nav_tooltip.plugins',
+        routeName: 'plugins'
+    },
+    {
         key: 'favorite-friends',
         icon: 'ri-user-heart-line',
         tooltip: 'nav_tooltip.favorite_friends',

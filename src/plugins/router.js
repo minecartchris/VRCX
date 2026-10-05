@@ -19,6 +19,7 @@ import MyAvatars from './../views/MyAvatars/MyAvatars.vue';
 import Notification from './../views/Notifications/Notification.vue';
 import PlayerList from './../views/PlayerList/PlayerList.vue';
 import ScreenshotMetadata from './../views/Tools/ScreenshotMetadata.vue';
+import Plugins from './../views/Plugins/Plugins.vue';
 import Search from './../views/Search/Search.vue';
 import Settings from './../views/Settings/Settings.vue';
 import Tools from './../views/Tools/Tools.vue';
@@ -45,6 +46,7 @@ const routes = [
             { path: 'game-log', name: 'game-log', component: GameLog },
             { path: 'player-list', name: 'player-list', component: PlayerList },
             { path: 'search', name: 'search', component: Search },
+            { path: 'plugins', name: 'plugins', component: Plugins },
             {
                 path: 'dashboard/:id',
                 name: 'dashboard',
