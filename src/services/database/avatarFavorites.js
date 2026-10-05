@@ -77,6 +77,10 @@ const avatarFavorites = {
         await sqliteService.execute((dbRow) => {
             var row = {
                 id: dbRow[0],
+                // Columns 1 and 2 come from the history table rather than the
+                // avatar cache: when it was last worn, and total time worn.
+                lastWornAt: dbRow[1],
+                timeSpent: dbRow[2] || 0,
                 authorId: dbRow[5],
                 authorName: dbRow[6],
                 created_at: dbRow[7],

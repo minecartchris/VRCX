@@ -43,7 +43,7 @@
     import OpenExternalLinkDialog from './components/dialogs/OpenExternalLinkDialog.vue';
     import OtpDialogModal from './components/ui/dialog/OtpDialogModal.vue';
     import PromptDialogModal from './components/ui/dialog/PromptDialogModal.vue';
-    import PluginImportDialog from './views/Settings/components/PluginImportDialog.vue';
+    import PluginImportDialog from './views/Plugins/components/PluginImportDialog.vue';
     import VRCXUpdateDialog from './components/dialogs/VRCXUpdateDialog.vue';
 
     import '@/styles/globals.css';

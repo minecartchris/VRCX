@@ -86,8 +86,8 @@
     import { Badge } from '@/components/ui/badge';
     import { Button } from '@/components/ui/button';
     import { Switch } from '@/components/ui/switch';
-    import PluginSettingsDialog from '../PluginSettingsDialog.vue';
-    import SettingsGroup from '../SettingsGroup.vue';
+    import PluginSettingsDialog from './PluginSettingsDialog.vue';
+    import SettingsGroup from '@/views/Settings/components/SettingsGroup.vue';
     import {
         externalPlugins,
         getAllPlugins,

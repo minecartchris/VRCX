@@ -83,7 +83,8 @@
         "help_support": "Help & Support",
         "expand_menu": "Expand Menu",
         "collapse_menu": "Collapse Menu",
-        "toggle_theme": "Toggle Theme"
+        "toggle_theme": "Toggle Theme",
+        "plugins": "Plugins"
     },
     "nav_menu": {
         "resources": "RESOURCES",
@@ -756,8 +757,7 @@
                 "social": "Social",
                 "vr": "VR",
                 "media": "Media",
-                "integrations": "Integrations",
-                "plugins": "Plugins"
+                "integrations": "Integrations"
             },
             "social": {
                 "interaction": {
@@ -1457,6 +1457,41 @@
                 "avatar_change_log": {
                     "name": "Avatar change log",
                     "description": "Keeps a log of who in your instance switched avatar, and when."
+                }
+            },
+            "tab": {
+                "plugins": "Plugins",
+                "avatars": "Avatars"
+            },
+            "avatars": {
+                "loading": "Loading…",
+                "search": {
+                    "header": "Search avatars",
+                    "description": "Keyword search across every avatar VRCX knows about, using the avtr.zip query syntax.",
+                    "placeholder": "e.g. cat ears -nsfw  ·  tag:any(kemono, fox)  ·  fuzzy:0.6 protogen",
+                    "syntax": "Query syntax",
+                    "pool": "Searching {count} avatars from your history, favorites and database results.",
+                    "empty": "Nothing matched that query.",
+                    "hint_text": "plain words match the name, description, tags and author",
+                    "hint_exclude": "a leading minus excludes a term",
+                    "hint_author": "match a specific creator by name or id",
+                    "hint_any": "at least one of these tags; use all(...) to require every one",
+                    "hint_fuzzy": "approximate matching, 0 is loose and 1 is near-exact",
+                    "hint_sort": "sort by name, authorName, createdAt or updatedAt"
+                },
+                "rediscover": {
+                    "header": "Rediscover your avatars",
+                    "description": "Avatars you put real time into but have not worn in a while. Local only — nothing leaves your machine.",
+                    "empty": "Nothing to suggest yet. Wear a few avatars and check back.",
+                    "caption": "Last worn {age} ago · {minutes} min total"
+                },
+                "database": {
+                    "header": "From the avatar database",
+                    "description": "Public avatars by creators you already wear or have favorited, from your configured avatar provider.",
+                    "action": "Look up suggestions",
+                    "fetch": "Find avatars",
+                    "no_provider": "No avatar provider is configured in Settings.",
+                    "empty": "No new avatars came back for those creators."
                 }
             }
         }

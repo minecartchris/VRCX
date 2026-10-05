@@ -26,9 +26,6 @@
                 <template #integrations>
                     <IntegrationsTab />
                 </template>
-                <template #plugins>
-                    <PluginsTab />
-                </template>
                 <template #advanced>
                     <AdvancedTab />
                 </template>
@@ -47,7 +44,6 @@
     import IntegrationsTab from './components/Tabs/IntegrationsTab.vue';
     import MediaTab from './components/Tabs/MediaTab.vue';
     import NotificationsTab from './components/Tabs/NotificationsTab.vue';
-    import PluginsTab from './components/Tabs/PluginsTab.vue';
     import SocialTab from './components/Tabs/SocialTab.vue';
     import SystemTab from './components/Tabs/SystemTab.vue';
     import VrTab from './components/Tabs/VrTab.vue';
@@ -61,7 +57,6 @@
         { value: 'vr', label: t('view.settings.category.vr') },
         { value: 'media', label: t('view.settings.category.media') },
         { value: 'integrations', label: t('view.settings.category.integrations') },
-        { value: 'plugins', label: t('view.settings.category.plugins') },
         { value: 'advanced', label: t('view.settings.category.advanced') }
     ]);
 
