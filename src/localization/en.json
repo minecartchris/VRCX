@@ -1465,6 +1465,8 @@
             },
             "avatars": {
                 "loading": "Loading…",
+                "show_more": "Show more",
+                "showing": "Showing {shown} of {total}",
                 "search": {
                     "header": "Search avatars",
                     "description": "Keyword search across every avatar VRCX knows about, using the avtr.zip query syntax.",
@@ -1483,15 +1485,20 @@
                     "header": "Rediscover your avatars",
                     "description": "Avatars you put real time into but have not worn in a while. Local only — nothing leaves your machine.",
                     "empty": "Nothing to suggest yet. Wear a few avatars and check back.",
-                    "caption": "Last worn {age} ago · {minutes} min total"
+                    "caption": "Last worn {age} ago · {minutes} min total",
+                    "different": "Show different ones"
                 },
                 "database": {
                     "header": "From the avatar database",
-                    "description": "Public avatars by creators you already wear or have favorited, from your configured avatar provider.",
+                    "description": "Public avatars by creators you already wear or have favorited, then keyword searches based on what you wear, from your configured avatar provider.",
                     "action": "Look up suggestions",
                     "fetch": "Find avatars",
                     "no_provider": "No avatar provider is configured in Settings.",
-                    "empty": "No new avatars came back for those creators."
+                    "empty": "No new avatars came back for those creators.",
+                    "start_over": "Start over",
+                    "new": "New recommendations",
+                    "progress": "{count} suggested so far",
+                    "exhausted": "That's everything — {count} suggested. Start over to go again."
                 }
             }
         }

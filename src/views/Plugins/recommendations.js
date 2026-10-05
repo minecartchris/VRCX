@@ -120,7 +120,7 @@ export function rankRediscoveries(
  * @param {AvatarHistoryEntry[]} history
  * @param {{ authorId?: string; ref?: { authorId?: string } }[]} favorites
  * @param {object} [options]
- * @param {number} [options.limit]
+ * @param {number} [options.limit] 0 returns every author
  * @param {string} [options.excludeAuthorId] Normally your own id
  * @returns {string[]} Author ids, strongest first
  */
@@ -146,10 +146,149 @@ export function pickTopAuthors(history, favorites, { limit = 5, excludeAuthorId 
         add(favorite?.authorId ?? favorite?.ref?.authorId, 60);
     }
 
-    return Array.from(weights.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, Math.max(0, limit))
-        .map(([authorId]) => authorId);
+    const ranked = Array.from(weights.entries()).sort((a, b) => b[1] - a[1]);
+    return (limit > 0 ? ranked.slice(0, limit) : ranked).map(([authorId]) => authorId);
+}
+
+// Words that say nothing about what an avatar looks like.
+const KEYWORD_STOPWORDS = new Set([
+    'and',
+    'the',
+    'for',
+    'with',
+    'avatar',
+    'avatars',
+    'avtr',
+    'base',
+    'model',
+    'edit',
+    'edited',
+    'version',
+    'ver',
+    'new',
+    'old',
+    'free',
+    'public',
+    'private',
+    'quest',
+    'android',
+    'pc',
+    'ios',
+    'copy',
+    'test',
+    'fixed',
+    'fix',
+    'update',
+    'updated',
+    'mobile',
+    'cross',
+    'platform'
+]);
+
+/**
+ * Tags worth searching on: creator-set ones, minus the author_tag_ prefix.
+ * System tags (content_, admin_, etc.) describe ratings, not looks.
+ *
+ * @param {unknown} tags
+ * @returns {string[]}
+ */
+function authorTags(tags) {
+    if (!Array.isArray(tags)) {
+        return [];
+    }
+    return tags
+        .filter((tag) => typeof tag === 'string' && tag.startsWith('author_tag_'))
+        .map((tag) => tag.slice('author_tag_'.length));
+}
+
+/**
+ * Splits a name into searchable words: lowercase, letters only, no version
+ * numbers, platform markers or filler.
+ *
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function extractKeywords(text) {
+    if (typeof text !== 'string') {
+        return [];
+    }
+    const words = text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+    return words.filter((word) => !KEYWORD_STOPWORDS.has(word));
+}
+
+/**
+ * Picks keywords for exploring beyond the creators you already know: words
+ * from the names and tags of avatars you wear the most, weighted the same way
+ * as {@link pickTopAuthors}.
+ *
+ * Each avatar contributes a word once, so a name like "Fox Fox Fox" does not
+ * outweigh three different fox avatars.
+ *
+ * @param {AvatarHistoryEntry[]} history
+ * @param {{ name?: string; tags?: string[]; ref?: { name?: string; tags?: string[] } }[]} favorites
+ * @param {object} [options]
+ * @param {number} [options.limit] 0 returns every keyword
+ * @returns {string[]} Strongest first
+ */
+export function pickKeywords(history, favorites, { limit = 10 } = {}) {
+    /** @type {Map<string, number>} */
+    const weights = new Map();
+
+    /**
+     * @param {{ name?: string; tags?: string[] } | undefined} avatar
+     * @param {number} weight
+     */
+    function add(avatar, weight) {
+        const words = new Set([...extractKeywords(avatar?.name), ...authorTags(avatar?.tags).flatMap(extractKeywords)]);
+        for (const word of words) {
+            weights.set(word, (weights.get(word) ?? 0) + weight);
+        }
+    }
+
+    for (const entry of Array.isArray(history) ? history : []) {
+        add(entry, Math.max(1, (entry?.timeSpent ?? 0) / 60000));
+    }
+    for (const favorite of Array.isArray(favorites) ? favorites : []) {
+        add(favorite?.ref ?? favorite, 60);
+    }
+
+    const ranked = Array.from(weights.entries()).sort((a, b) => b[1] - a[1]);
+    return (limit > 0 ? ranked.slice(0, limit) : ranked).map(([word]) => word);
+}
+
+/**
+ * Reorders avatars so consecutive picks come from different creators, keeping
+ * each creator's own order. Without this one prolific creator can fill a whole
+ * page before anyone else gets a look in.
+ *
+ * @template {{ authorId?: string }} T
+ * @param {T[]} avatars
+ * @returns {T[]}
+ */
+export function interleaveByAuthor(avatars) {
+    /** @type {Map<string, T[]>} */
+    const byAuthor = new Map();
+    const all = Array.isArray(avatars) ? avatars : [];
+    for (const avatar of all) {
+        const key = avatar?.authorId ?? '';
+        let list = byAuthor.get(key);
+        if (!list) {
+            list = [];
+            byAuthor.set(key, list);
+        }
+        list.push(avatar);
+    }
+
+    const queues = Array.from(byAuthor.values());
+    const result = [];
+    for (let round = 0; result.length < all.length; ++round) {
+        for (const queue of queues) {
+            if (round < queue.length) {
+                result.push(queue[round]);
+            }
+        }
+    }
+    return result;
 }
 
 /**
