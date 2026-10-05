@@ -1,7 +1,10 @@
 name: VRCX
 
 on:
-  - workflow_dispatch
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.ref }}
@@ -325,3 +328,117 @@ jobs:
         with:
           name: VRCX-Zip
           path: 'VRCX_${{ needs.set_version.outputs.version }}.zip'
+
+  # Publishes a GitHub release when the version in `Version` has no tag yet.
+  # Pushes that do not bump the version still build and upload artifacts; they
+  # just skip this job, so merging unrelated work never clobbers a release.
+  release:
+    runs-on: ubuntu-latest
+    needs: [set_version, create_setup]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check whether this version is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ needs.set_version.outputs.version }}"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; skipping. Bump Version to cut a new one."
+            echo "publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "publish=true" >> $GITHUB_OUTPUT
+          fi
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+
+      # Only the artifacts that are actually release assets. Downloading
+      # everything would also pull in Cef-Release, whose VRCX.exe and CEF
+      # subprocess binaries would then be uploaded alongside the installer.
+      - name: Download the Windows installer
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: Cef-Setup
+          path: dist
+      - name: Download the portable zip
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: VRCX-Zip
+          path: dist
+      - name: Download the x64 AppImage
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: Electron-AppImage-x64
+          path: dist
+      - name: Download the arm64 AppImage
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: Electron-AppImage-arm64
+          path: dist
+      - name: Download the x64 macOS disk image
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: Electron-MacDmg-x64
+          path: dist
+      - name: Download the arm64 macOS disk image
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: Electron-MacDmg-arm64
+          path: dist
+
+      - name: Create the release
+        if: steps.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.check.outputs.tag }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "VRCX ${{ needs.set_version.outputs.version }}" \
+            --target "${GITHUB_SHA}" \
+            --generate-notes
+
+      # Uploaded through the REST API rather than `gh release upload` so each
+      # asset's Content-Type is set explicitly: the in-app updater only accepts
+      # the installer as application/x-msdownload and an AppImage as
+      # application/octet-stream, and skips anything else.
+      - name: Upload release assets
+        if: steps.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+          shopt -s nullglob globstar
+          found=0
+          for file in dist/**/*; do
+            [ -f "${file}" ] || continue
+            name="$(basename "${file}")"
+            case "${name}" in
+              *.exe) content_type="application/x-msdownload" ;;
+              *.AppImage) content_type="application/octet-stream" ;;
+              *.dmg) content_type="application/octet-stream" ;;
+              *.zip) content_type="application/zip" ;;
+              *) continue ;;
+            esac
+            echo "Uploading ${name} as ${content_type}"
+            curl --fail-with-body -sS -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: ${content_type}" \
+              --data-binary @"${file}" \
+              "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${name}" \
+              >/dev/null
+            found=$((found + 1))
+          done
+          if [ "${found}" -eq 0 ]; then
+            echo "::error::No release assets were found; the in-app updater needs at least the Windows installer."
+            exit 1
+          fi
+          echo "Uploaded ${found} asset(s) to ${TAG}"
