@@ -1,5 +1,5 @@
 /**
- * Scoring for the recommended avatars panel.
+ * Ranking for the recommended avatars panel.
  *
  * Kept free of stores and network calls so the ranking can be tested on plain
  * data; the component supplies the inputs and performs the lookups.
@@ -32,82 +32,6 @@ export function toTimestamp(value) {
     }
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : 0;
-}
-
-/**
- * A history entry with its rediscovery ranking attached.
- *
- * @typedef {object} RediscoveryEntry
- * @property {string} id
- * @property {string} [name]
- * @property {string} [authorId]
- * @property {string} [authorName]
- * @property {string} [thumbnailImageUrl]
- * @property {string} [imageUrl]
- * @property {number} score
- * @property {number} daysSinceWorn
- * @property {number} minutesWorn
- */
-
-/**
- * Ranks avatars you already own by "worth revisiting": ones you put real time
- * into but have not worn lately.
- *
- * Time worn is the main signal, nudged up by how long it has been. The nudge
- * is logarithmic so an avatar untouched for two years does not bury one you
- * genuinely wore more.
- *
- * @param {AvatarHistoryEntry[]} history
- * @param {object} [options]
- * @param {number} [options.now] Epoch ms, injectable for tests
- * @param {number} [options.minDaysSinceWorn] Anything worn more recently is not a rediscovery
- * @param {Set<string> | string[]} [options.excludeIds] E.g. the avatar you are wearing now
- * @param {number} [options.limit]
- * @returns {RediscoveryEntry[]}
- */
-export function rankRediscoveries(
-    history,
-    { now = Date.now(), minDaysSinceWorn = 14, excludeIds = [], limit = 24 } = {}
-) {
-    if (!Array.isArray(history)) {
-        return [];
-    }
-    const excluded = excludeIds instanceof Set ? excludeIds : new Set(excludeIds);
-
-    /** @type {RediscoveryEntry[]} */
-    const scored = [];
-    const seen = new Set();
-    for (const entry of history) {
-        if (!entry?.id || excluded.has(entry.id) || seen.has(entry.id)) {
-            continue;
-        }
-        seen.add(entry.id);
-
-        const lastWornAt = toTimestamp(entry.lastWornAt);
-        // Without a timestamp there is no way to tell a rediscovery from
-        // something worn an hour ago, so leave it out rather than guess.
-        if (lastWornAt === 0) {
-            continue;
-        }
-        const daysSinceWorn = Math.max(0, (now - lastWornAt) / DAY_MS);
-        if (daysSinceWorn < minDaysSinceWorn) {
-            continue;
-        }
-        const minutesWorn = Math.max(0, (entry.timeSpent ?? 0) / 60000);
-        if (minutesWorn <= 0) {
-            continue;
-        }
-
-        scored.push({
-            ...entry,
-            minutesWorn,
-            daysSinceWorn,
-            score: minutesWorn * Math.log10(10 + daysSinceWorn)
-        });
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    return limit > 0 ? scored.slice(0, limit) : scored;
 }
 
 /**
@@ -298,10 +222,12 @@ export function interleaveByAuthor(avatars) {
  * @param {Set<string> | string[]} knownIds
  * @param {object} [options]
  * @param {number} [options.limit]
+ * @param {Set<string> | string[]} [options.excludeAuthorIds] Creators to leave out entirely
  * @returns {object[]}
  */
-export function filterNewAvatars(candidates, knownIds, { limit = 24 } = {}) {
+export function filterNewAvatars(candidates, knownIds, { limit = 24, excludeAuthorIds = [] } = {}) {
     const known = knownIds instanceof Set ? knownIds : new Set(knownIds);
+    const excludedAuthors = excludeAuthorIds instanceof Set ? excludeAuthorIds : new Set(excludeAuthorIds);
     const result = [];
     const seen = new Set();
 
@@ -311,6 +237,9 @@ export function filterNewAvatars(candidates, knownIds, { limit = 24 } = {}) {
             continue;
         }
         if (avatar.releaseStatus && avatar.releaseStatus !== 'public') {
+            continue;
+        }
+        if (avatar.authorId && excludedAuthors.has(avatar.authorId)) {
             continue;
         }
         seen.add(id);
@@ -323,23 +252,98 @@ export function filterNewAvatars(candidates, knownIds, { limit = 24 } = {}) {
 }
 
 /**
- * "3 months", "12 days" — a coarse age for the rediscovery cards.
+ * When an avatar was last uploaded or updated, whichever is later. Providers
+ * fill unknown dates with year 0001, which counts as never.
  *
- * @param {number} days
- * @returns {string}
+ * @param {{ created_at?: string; updated_at?: string }} avatar
+ * @returns {number} Epoch ms, or 0 when unknown
  */
-export function formatAge(days) {
-    if (!Number.isFinite(days) || days < 1) {
-        return 'today';
+export function uploadedAt(avatar) {
+    return Math.max(0, toTimestamp(avatar?.updated_at), toTimestamp(avatar?.created_at));
+}
+
+/**
+ * Newest uploads first. Stable, so avatars with no date keep their order.
+ *
+ * @template T
+ * @param {T[]} avatars
+ * @returns {T[]}
+ */
+export function sortByRecent(avatars) {
+    return (Array.isArray(avatars) ? avatars : [])
+        .map((avatar, index) => ({ avatar, index, at: uploadedAt(avatar) }))
+        .sort((a, b) => b.at - a.at || a.index - b.index)
+        .map(({ avatar }) => avatar);
+}
+
+/**
+ * Drops "already shown you" entries older than the cutoff, so those avatars
+ * can come back around.
+ *
+ * @param {Record<string, number>} seen Avatar id to epoch ms it was shown
+ * @param {object} [options]
+ * @param {number} [options.now]
+ * @param {number} [options.maxAgeDays]
+ * @returns {Record<string, number>}
+ */
+export function pruneSeen(seen, { now = Date.now(), maxAgeDays = 30 } = {}) {
+    const cutoff = now - maxAgeDays * DAY_MS;
+    /** @type {Record<string, number>} */
+    const result = {};
+    if (!seen || typeof seen !== 'object') {
+        return result;
     }
-    if (days < 30) {
-        const whole = Math.round(days);
-        return `${whole} day${whole === 1 ? '' : 's'}`;
+    for (const [id, at] of Object.entries(seen)) {
+        if (typeof at === 'number' && at >= cutoff) {
+            result[id] = at;
+        }
     }
-    if (days < 365) {
-        const months = Math.round(days / 30);
-        return `${months} month${months === 1 ? '' : 's'}`;
+    return result;
+}
+
+/**
+ * Builds one page by alternating between avatars from creators you know and
+ * avatars from creators you have never worn, so the two come out about half
+ * and half. When one side runs dry the other fills the rest.
+ *
+ * Picks also avoid any creator used in the last `gap` cards, looking a little
+ * way down the queue for someone else before giving in, so a page is not a
+ * run of one creator's uploads.
+ *
+ * @template {{ authorId?: string }} T
+ * @param {T[]} familiar
+ * @param {T[]} discovery
+ * @param {object} [options]
+ * @param {number} [options.size]
+ * @param {number} [options.gap]
+ * @param {number} [options.lookahead] How far down a queue to search for a different creator
+ * @returns {{ page: T[]; familiar: T[]; discovery: T[] }} The page, plus what is left of each queue
+ */
+export function buildMixedPage(familiar, discovery, { size = 24, gap = 3, lookahead = 40 } = {}) {
+    const queues = [
+        Array.isArray(familiar) ? [...familiar] : [],
+        Array.isArray(discovery) ? [...discovery] : []
+    ];
+    const page = [];
+    /** @type {string[]} */
+    const recentAuthors = [];
+
+    for (let turn = 0; page.length < size && (queues[0].length > 0 || queues[1].length > 0); ++turn) {
+        const preferred = queues[turn % 2].length > 0 ? queues[turn % 2] : queues[(turn + 1) % 2];
+        const limit = Math.min(preferred.length, lookahead);
+        let pick = 0;
+        for (let i = 0; i < limit; ++i) {
+            if (!recentAuthors.includes(preferred[i]?.authorId ?? '')) {
+                pick = i;
+                break;
+            }
+        }
+        const [avatar] = preferred.splice(pick, 1);
+        page.push(avatar);
+        recentAuthors.push(avatar?.authorId ?? '');
+        if (recentAuthors.length > gap) {
+            recentAuthors.shift();
+        }
     }
-    const years = Math.round((days / 365) * 10) / 10;
-    return `${years} year${years === 1 ? '' : 's'}`;
+    return { page, familiar: queues[0], discovery: queues[1] };
 }

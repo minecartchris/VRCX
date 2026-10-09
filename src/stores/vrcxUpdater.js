@@ -275,7 +275,7 @@ export const useVRCXUpdaterStore = defineStore('VRCXUpdater', () => {
             // handle invalid branch
             setBranch('Stable');
         }
-        const url = branches[branch.value].urlLatest;
+        const { urlLatest: url, prerelease: isPrereleaseBranch } = branches[branch.value];
         checkingForVRCXUpdate.value = true;
         let response;
         let json;
@@ -304,6 +304,9 @@ export const useVRCXUpdaterStore = defineStore('VRCXUpdater', () => {
         }
         pendingVRCXUpdate.value = false;
         logWebRequest('[EXTERNAL GET]', url, `(${response.status})`, json);
+        if (isPrereleaseBranch) {
+            json = Array.isArray(json) ? json.find((release) => release?.prerelease) : null;
+        }
         if (json === Object(json) && json.name && json.published_at) {
             changeLogDialog.value.buildName = json.name;
             changeLogDialog.value.changeLog = changeLogRemoveLinks(json.body);
@@ -316,7 +319,13 @@ export const useVRCXUpdaterStore = defineStore('VRCXUpdater', () => {
             if (releaseName === pendingVRCXInstall.value) {
                 // update already downloaded
                 VRCXUpdateDialog.value.updatePendingIsLatest = true;
-            } else if (releaseName > currentVersion.value) {
+            } else if (
+                isPrereleaseBranch
+                    ? // Nightly names end in a commit hash, so they do not
+                      // sort; the newest prerelease is newer unless it is this.
+                      releaseName !== currentVersion.value
+                    : releaseName > currentVersion.value
+            ) {
                 const { downloadUrl, hashString, size } = getAssetOfInterest(json.assets);
                 if (!downloadUrl) {
                     return true;
@@ -393,8 +402,10 @@ export const useVRCXUpdaterStore = defineStore('VRCXUpdater', () => {
             );
             return;
         }
+        // Stable lists full releases only; Nightly lists prereleases only.
+        const wantPrerelease = Boolean(branches[branch.value].prerelease);
         for (const release of json) {
-            if (release.prerelease) {
+            if (Boolean(release.prerelease) !== wantPrerelease) {
                 continue;
             }
             assetLoop: for (const asset of release.assets) {
@@ -405,7 +416,7 @@ export const useVRCXUpdaterStore = defineStore('VRCXUpdater', () => {
             }
         }
         D.releases = releases;
-        D.release = json[0].name;
+        D.release = releases[0]?.name ?? '';
         VRCXUpdateDialog.value.updatePendingIsLatest = false;
         if (D.release === pendingVRCXInstall.value) {
             // update already downloaded and latest version

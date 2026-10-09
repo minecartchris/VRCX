@@ -39,50 +39,6 @@
             </div>
         </SettingsGroup>
 
-        <!-- Rediscover: local only, no network -->
-        <SettingsGroup :title="t('view.plugins.avatars.rediscover.header')">
-            <template #description>
-                <p class="m-0">{{ t('view.plugins.avatars.rediscover.description') }}</p>
-            </template>
-
-            <div v-if="loadingHistory" class="py-6 text-center text-sm text-muted-foreground">
-                {{ t('view.plugins.avatars.loading') }}
-            </div>
-            <div v-else-if="rediscoveries.length === 0" class="py-6 text-center text-sm text-muted-foreground">
-                {{ t('view.plugins.avatars.rediscover.empty') }}
-            </div>
-            <div v-else class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                <AvatarSuggestionCard
-                    v-for="avatar in visibleRediscoveries"
-                    :key="avatar.id"
-                    :avatar="avatar"
-                    :caption="
-                        t('view.plugins.avatars.rediscover.caption', {
-                            age: formatAge(avatar.daysSinceWorn),
-                            minutes: Math.round(avatar.minutesWorn)
-                        })
-                    "
-                    @click="openAvatar(avatar.id)" />
-            </div>
-            <div v-if="rediscoveries.length > PAGE_SIZE" class="flex flex-wrap items-center gap-2">
-                <Button v-if="canShowMoreRediscoveries" size="sm" variant="outline" @click="showMoreRediscoveries">
-                    {{ t('view.plugins.avatars.show_more') }}
-                </Button>
-                <Button size="sm" variant="outline" @click="showDifferentRediscoveries">
-                    <i class="ri-refresh-line" />
-                    {{ t('view.plugins.avatars.rediscover.different') }}
-                </Button>
-                <span class="text-xs text-muted-foreground">
-                    {{
-                        t('view.plugins.avatars.showing', {
-                            shown: visibleRediscoveries.length,
-                            total: rediscoveries.length
-                        })
-                    }}
-                </span>
-            </div>
-        </SettingsGroup>
-
         <!-- From the avatar database: explicit opt-in, since it leaves the machine -->
         <SettingsGroup :title="t('view.plugins.avatars.database.header')">
             <template #description>
@@ -90,7 +46,7 @@
             </template>
 
             <SettingsItem :label="t('view.plugins.avatars.database.action')" :description="providerDescription">
-                <Button size="sm" :disabled="!hasProvider || loadingDatabase" @click="startDatabaseRecommendations">
+                <Button size="sm" :disabled="!hasProvider || loadingDatabase || loadingHistory" @click="startDatabaseRecommendations">
                     <i v-if="loadingDatabase" class="ri-loader-4-line animate-spin" />
                     {{
                         loadingDatabase
@@ -110,7 +66,9 @@
                     :key="avatar.id"
                     :avatar="avatar"
                     :caption="avatar.authorName || ''"
-                    @click="openAvatar(avatar.id)" />
+                    :hide-label="t('view.plugins.avatars.database.hide')"
+                    @click="openAvatar(avatar.id)"
+                    @hide="hideAvatar(avatar.id)" />
             </div>
             <p
                 v-else-if="hasSearchedDatabase && !loadingDatabase && !databaseError"
@@ -149,25 +107,31 @@
     import AvatarSuggestionCard from './AvatarSuggestionCard.vue';
     import SettingsGroup from '@/views/Settings/components/SettingsGroup.vue';
     import SettingsItem from '@/views/Settings/components/SettingsItem.vue';
+    import configRepository from '@/services/config';
     import { database } from '@/services/database';
     import { lookupAvatars, showAvatarDialog } from '@/coordinators/avatarCoordinator';
     import { useAvatarProviderStore, useFavoriteStore, useUserStore } from '@/stores';
     import {
+        buildMixedPage,
         filterNewAvatars,
-        formatAge,
         interleaveByAuthor,
         pickKeywords,
         pickTopAuthors,
-        rankRediscoveries
+        pruneSeen,
+        sortByRecent
     } from '../recommendations';
     import { searchAvatars } from '../avatarQuery';
 
-    /** Cards per page, in both recommendation sections. */
+    /** Cards per page. */
     const PAGE_SIZE = 24;
     /** How many authors or keywords to look up per network round. */
     const SOURCES_PER_ROUND = 3;
-    /** Keyword searches to fall back on once your known creators run dry. */
+    /** Keyword searches used to find creators you have not worn yet. */
     const KEYWORD_LIMIT = 15;
+    /** Days before an avatar you were already shown can be suggested again. */
+    const SEEN_DAYS = 30;
+    const SEEN_KEY = 'VRCX_avatarRecommendationsSeen';
+    const HIDDEN_KEY = 'VRCX_avatarRecommendationsHidden';
 
     const { t } = useI18n();
 
@@ -222,86 +186,117 @@
         showAvatarDialog(avatarId);
     }
 
-    // Rediscover: a window over the full local ranking.
-
-    const rediscoveries = computed(() =>
-        rankRediscoveries(history.value, {
-            excludeIds: [userStore.currentUser?.currentAvatar].filter(Boolean),
-            limit: 0
-        })
-    );
-    const rediscoverOffset = ref(0);
-    const rediscoverCount = ref(PAGE_SIZE);
-
-    const visibleRediscoveries = computed(() => {
-        const all = rediscoveries.value;
-        const count = Math.min(rediscoverCount.value, all.length);
-        // Wraps around, so "show different ones" keeps cycling instead of
-        // landing on an empty page.
-        return Array.from({ length: count }, (_, i) => all[(rediscoverOffset.value + i) % all.length]);
-    });
-
-    const canShowMoreRediscoveries = computed(() => rediscoverCount.value < rediscoveries.value.length);
-
-    function showMoreRediscoveries() {
-        rediscoverCount.value += PAGE_SIZE;
-    }
-
-    function showDifferentRediscoveries() {
-        const total = rediscoveries.value.length;
-        if (total === 0) {
-            return;
-        }
-        rediscoverOffset.value = (rediscoverOffset.value + visibleRediscoveries.value.length) % total;
-        rediscoverCount.value = PAGE_SIZE;
-    }
-
-    // Avatar database: creators you already know first, then keyword searches
-    // built from what you wear, so it keeps finding new creators.
+    // Avatar database: half from creators you already wear or favorite, half
+    // from keyword searches with those creators filtered out, so every page
+    // also introduces people you have never worn. Newest uploads first, and
+    // nothing you have worn, favorited, hidden or been shown in the last
+    // SEEN_DAYS days.
 
     const loadingDatabase = ref(false);
     const hasSearchedDatabase = ref(false);
     const databaseError = ref('');
     /** Cards on screen. */
     const databaseResults = ref([]);
-    /** Fetched and filtered, waiting to be shown. */
-    const databasePool = ref([]);
     /** Every avatar any lookup returned, for the keyword search above. */
     const databaseFetched = ref([]);
     const databaseShownTotal = ref(0);
     const databaseSourcesLeft = ref(false);
+    const databaseQueued = ref(0);
 
-    /** Authors, then keywords, still to look up. */
-    let databaseSources = [];
-    let databaseCursor = 0;
-    /** Ids already shown or queued, so new recommendations never repeat one. */
-    let databaseSeen = new Set();
+    /**
+     * One half of the recommendations: what to look up, how far through it
+     * we are, and what came back but has not been shown yet.
+     *
+     * @typedef {object} RecommendationSide
+     * @property {{ type: string; value: string }[]} sources
+     * @property {number} cursor
+     * @property {object[]} pool
+     * @property {Set<string>} excludeAuthorIds
+     */
 
-    const databaseHasMore = computed(() => databasePool.value.length > 0 || databaseSourcesLeft.value);
+    /** @returns {RecommendationSide} */
+    function emptySide() {
+        return { sources: [], cursor: 0, pool: [], excludeAuthorIds: new Set() };
+    }
 
-    /** @returns {Set<string>} Ids already in your history or favorites */
-    function knownAvatarIds() {
-        const known = new Set(history.value.map((entry) => entry.id));
+    let familiar = emptySide();
+    let discovery = emptySide();
+    /** Ids queued or shown this session, so nothing repeats. */
+    let databaseQueuedIds = new Set();
+    /** @type {Record<string, number>} Avatar id to when it was shown */
+    let seenAt = {};
+    /** @type {Set<string>} */
+    let hiddenIds = new Set();
+
+    const databaseHasMore = computed(() => databaseQueued.value > 0 || databaseSourcesLeft.value);
+
+    /** @returns {Set<string>} Ids that should never be suggested */
+    function excludedAvatarIds() {
+        const excluded = new Set(history.value.map((entry) => entry.id));
         for (const favorite of favoriteStore.favoriteAvatars ?? []) {
             const id = favorite?.id ?? favorite?.ref?.id;
             if (id) {
-                known.add(id);
+                excluded.add(id);
             }
         }
-        return known;
+        for (const id of Object.keys(seenAt)) {
+            excluded.add(id);
+        }
+        for (const id of hiddenIds) {
+            excluded.add(id);
+        }
+        for (const id of databaseQueuedIds) {
+            excluded.add(id);
+        }
+        return excluded;
     }
 
     /**
-     * Looks up sources until the queue holds at least `needed` avatars, or
-     * there is nothing left to look up.
+     * @param {string} key
+     * @param {unknown} fallback
+     * @returns {Promise<any>}
+     */
+    async function readJson(key, fallback) {
+        try {
+            return JSON.parse(await configRepository.getString(key, '')) ?? fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    async function loadSeenAndHidden() {
+        seenAt = pruneSeen(await readJson(SEEN_KEY, {}), { maxAgeDays: SEEN_DAYS });
+        const hidden = await readJson(HIDDEN_KEY, []);
+        hiddenIds = new Set(Array.isArray(hidden) ? hidden : []);
+    }
+
+    /** @param {object[]} page */
+    async function markSeen(page) {
+        const now = Date.now();
+        for (const avatar of page) {
+            seenAt[avatar.id] = now;
+        }
+        await configRepository.setString(SEEN_KEY, JSON.stringify(seenAt));
+    }
+
+    /** @param {string} avatarId */
+    async function hideAvatar(avatarId) {
+        hiddenIds.add(avatarId);
+        databaseResults.value = databaseResults.value.filter((avatar) => avatar.id !== avatarId);
+        await configRepository.setString(HIDDEN_KEY, JSON.stringify(Array.from(hiddenIds)));
+    }
+
+    /**
+     * Looks up a side's sources until its pool holds at least `needed`
+     * avatars, or there is nothing left to look up.
      *
+     * @param {RecommendationSide} side
      * @param {number} needed
      */
-    async function fillDatabasePool(needed) {
-        const known = knownAvatarIds();
-        while (databasePool.value.length < needed && databaseCursor < databaseSources.length) {
-            const round = databaseSources.slice(databaseCursor, databaseCursor + SOURCES_PER_ROUND);
-            databaseCursor += round.length;
+    async function fillSide(side, needed) {
+        while (side.pool.length < needed && side.cursor < side.sources.length) {
+            const round = side.sources.slice(side.cursor, side.cursor + SOURCES_PER_ROUND);
+            side.cursor += round.length;
 
             const found = [];
             for (const source of round) {
@@ -311,14 +306,36 @@
             databaseFetched.value = [...databaseFetched.value, ...found];
 
             const fresh = interleaveByAuthor(
-                filterNewAvatars(found, new Set([...known, ...databaseSeen]), { limit: 0 })
+                sortByRecent(
+                    filterNewAvatars(found, excludedAvatarIds(), {
+                        limit: 0,
+                        excludeAuthorIds: side.excludeAuthorIds
+                    })
+                )
             );
             for (const avatar of fresh) {
-                databaseSeen.add(avatar.id);
+                databaseQueuedIds.add(avatar.id);
             }
-            databasePool.value = [...databasePool.value, ...fresh];
+            side.pool = [...side.pool, ...fresh];
         }
-        databaseSourcesLeft.value = databaseCursor < databaseSources.length;
+    }
+
+    /**
+     * Fills both sides for a page: half each, then whichever still has
+     * sources makes up for the other running out.
+     */
+    async function fillPools() {
+        const half = Math.ceil(PAGE_SIZE / 2);
+        await fillSide(familiar, half);
+        await fillSide(discovery, half);
+        await fillSide(familiar, PAGE_SIZE - Math.min(discovery.pool.length, half));
+        await fillSide(discovery, PAGE_SIZE - Math.min(familiar.pool.length, half));
+    }
+
+    function updateDatabaseCounts() {
+        databaseQueued.value = familiar.pool.length + discovery.pool.length;
+        databaseSourcesLeft.value =
+            familiar.cursor < familiar.sources.length || discovery.cursor < discovery.sources.length;
     }
 
     /**
@@ -330,11 +347,14 @@
         loadingDatabase.value = true;
         databaseError.value = '';
         try {
-            await fillDatabasePool(PAGE_SIZE);
-            const page = databasePool.value.slice(0, PAGE_SIZE);
-            databasePool.value = databasePool.value.slice(PAGE_SIZE);
-            databaseShownTotal.value += page.length;
-            apply(page);
+            await fillPools();
+            const result = buildMixedPage(familiar.pool, discovery.pool, { size: PAGE_SIZE });
+            familiar.pool = result.familiar;
+            discovery.pool = result.discovery;
+            updateDatabaseCounts();
+            databaseShownTotal.value += result.page.length;
+            apply(result.page);
+            await markSeen(result.page);
         } catch (err) {
             console.error('Avatar database lookup failed', err);
             databaseError.value = err instanceof Error ? err.message : String(err);
@@ -345,18 +365,21 @@
 
     async function startDatabaseRecommendations() {
         hasSearchedDatabase.value = true;
+        await loadSeenAndHidden();
+        const ownId = userStore.currentUser?.id ?? '';
         const authors = pickTopAuthors(history.value, favoriteStore.favoriteAvatars, {
             limit: 0,
-            excludeAuthorId: userStore.currentUser?.id ?? ''
+            excludeAuthorId: ownId
         });
         const keywords = pickKeywords(history.value, favoriteAvatarRefs.value, { limit: KEYWORD_LIMIT });
-        databaseSources = [
-            ...authors.map((value) => ({ type: 'authorId', value })),
-            ...keywords.map((value) => ({ type: 'search', value }))
-        ];
-        databaseCursor = 0;
-        databaseSeen = new Set();
-        databasePool.value = [];
+
+        familiar = emptySide();
+        familiar.sources = authors.map((value) => ({ type: 'authorId', value }));
+        discovery = emptySide();
+        discovery.sources = keywords.map((value) => ({ type: 'search', value }));
+        discovery.excludeAuthorIds = new Set([...authors, ownId].filter(Boolean));
+
+        databaseQueuedIds = new Set();
         databaseResults.value = [];
         databaseShownTotal.value = 0;
         await runDatabaseStep((page) => {

@@ -1481,20 +1481,14 @@
                     "hint_fuzzy": "approximate matching, 0 is loose and 1 is near-exact",
                     "hint_sort": "sort by name, authorName, createdAt or updatedAt"
                 },
-                "rediscover": {
-                    "header": "Rediscover your avatars",
-                    "description": "Avatars you put real time into but have not worn in a while. Local only — nothing leaves your machine.",
-                    "empty": "Nothing to suggest yet. Wear a few avatars and check back.",
-                    "caption": "Last worn {age} ago · {minutes} min total",
-                    "different": "Show different ones"
-                },
                 "database": {
                     "header": "From the avatar database",
-                    "description": "Public avatars by creators you already wear or have favorited, then keyword searches based on what you wear, from your configured avatar provider.",
+                    "description": "Newly uploaded public avatars from your configured avatar provider: about half by creators you already wear or have favorited, half by creators you have never worn. Avatars you have worn, hidden, or been shown in the last 30 days are skipped.",
                     "action": "Look up suggestions",
                     "fetch": "Find avatars",
                     "no_provider": "No avatar provider is configured in Settings.",
-                    "empty": "No new avatars came back for those creators.",
+                    "empty": "No new avatars came back. Ones shown in the last 30 days are skipped, so try again later.",
+                    "hide": "Don't suggest this again",
                     "start_over": "Start over",
                     "new": "New recommendations",
                     "progress": "{count} suggested so far",

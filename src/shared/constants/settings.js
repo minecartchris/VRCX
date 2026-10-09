@@ -20,11 +20,14 @@ const branches = {
         urlLatest:
             'https://api.github.com/repos/minecartchris/VRCX/releases/latest'
     },
+    // Nightlies are GitHub prereleases, which releases/latest never returns,
+    // so the updater lists recent releases and takes the newest prerelease.
     Nightly: {
         name: 'Nightly',
+        prerelease: true,
         urlReleases: 'https://api.github.com/repos/minecartchris/VRCX/releases',
         urlLatest:
-            'https://api.github.com/repos/minecartchris/VRCX/releases/latest'
+            'https://api.github.com/repos/minecartchris/VRCX/releases?per_page=30'
     }
     // Upstream, for reference:
     // Stable: {

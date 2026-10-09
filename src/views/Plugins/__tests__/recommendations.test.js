@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+    buildMixedPage,
     extractKeywords,
     filterNewAvatars,
-    formatAge,
     interleaveByAuthor,
     pickKeywords,
     pickTopAuthors,
-    rankRediscoveries,
-    toTimestamp
+    pruneSeen,
+    sortByRecent,
+    toTimestamp,
+    uploadedAt
 } from '../recommendations';
 
 const NOW = Date.parse('2026-01-01T00:00:00Z');
@@ -42,64 +44,6 @@ describe('toTimestamp', () => {
         expect(toTimestamp('not a date')).toBe(0);
         expect(toTimestamp(undefined)).toBe(0);
         expect(toTimestamp(NaN)).toBe(0);
-    });
-});
-
-describe('rankRediscoveries', () => {
-    test('ranks longer-worn avatars first', () => {
-        const result = rankRediscoveries(
-            [entry({ id: 'a', timeSpent: 30 * 60000 }), entry({ id: 'b', timeSpent: 600 * 60000 })],
-            { now: NOW }
-        );
-        expect(result.map((r) => r.id)).toEqual(['b', 'a']);
-    });
-
-    test('breaks a tie towards the one left alone longer', () => {
-        const result = rankRediscoveries(
-            [
-                entry({ id: 'recent', lastWornAt: new Date(NOW - 20 * DAY).toISOString() }),
-                entry({ id: 'old', lastWornAt: new Date(NOW - 300 * DAY).toISOString() })
-            ],
-            { now: NOW }
-        );
-        expect(result[0].id).toBe('old');
-    });
-
-    test('skips avatars worn too recently to be a rediscovery', () => {
-        const result = rankRediscoveries([entry({ lastWornAt: new Date(NOW - 2 * DAY).toISOString() })], { now: NOW });
-        expect(result).toEqual([]);
-    });
-
-    test('skips avatars with no recorded time worn', () => {
-        expect(rankRediscoveries([entry({ timeSpent: 0 })], { now: NOW })).toEqual([]);
-    });
-
-    test('skips avatars with an unusable timestamp rather than guessing', () => {
-        expect(rankRediscoveries([entry({ lastWornAt: '' })], { now: NOW })).toEqual([]);
-    });
-
-    test('honours excludeIds', () => {
-        const result = rankRediscoveries([entry({ id: 'worn-now' })], {
-            now: NOW,
-            excludeIds: ['worn-now']
-        });
-        expect(result).toEqual([]);
-    });
-
-    test('deduplicates repeated ids', () => {
-        const result = rankRediscoveries([entry({ id: 'dupe' }), entry({ id: 'dupe' })], {
-            now: NOW
-        });
-        expect(result).toHaveLength(1);
-    });
-
-    test('respects the limit', () => {
-        const many = Array.from({ length: 50 }, (_, i) => entry({ id: `a${i}` }));
-        expect(rankRediscoveries(many, { now: NOW, limit: 5 })).toHaveLength(5);
-    });
-
-    test('tolerates a missing history', () => {
-        expect(rankRediscoveries(undefined, { now: NOW })).toEqual([]);
     });
 });
 
@@ -159,16 +103,6 @@ describe('filterNewAvatars', () => {
 
     test('tolerates a nullish candidate list', () => {
         expect(filterNewAvatars(null, [])).toEqual([]);
-    });
-});
-
-describe('formatAge', () => {
-    test('describes days, months and years', () => {
-        expect(formatAge(0.5)).toBe('today');
-        expect(formatAge(1)).toBe('1 day');
-        expect(formatAge(12)).toBe('12 days');
-        expect(formatAge(60)).toBe('2 months');
-        expect(formatAge(400)).toBe('1.1 years');
     });
 });
 
@@ -238,5 +172,100 @@ describe('interleaveByAuthor', () => {
 
     test('tolerates junk input', () => {
         expect(interleaveByAuthor(undefined)).toEqual([]);
+    });
+});
+
+describe('filterNewAvatars with excluded creators', () => {
+    test('drops avatars by those creators', () => {
+        const result = filterNewAvatars(
+            [
+                { id: 'a1', authorId: 'known' },
+                { id: 'b1', authorId: 'stranger' }
+            ],
+            [],
+            { excludeAuthorIds: ['known'] }
+        );
+        expect(result.map((a) => a.id)).toEqual(['b1']);
+    });
+});
+
+describe('uploadedAt', () => {
+    test('uses whichever of created and updated is later', () => {
+        expect(uploadedAt({ created_at: '2025-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' })).toBe(NOW);
+        expect(uploadedAt({ created_at: '2026-01-01T00:00:00Z' })).toBe(NOW);
+    });
+
+    test('treats the provider placeholder date as unknown', () => {
+        expect(uploadedAt({ created_at: '0001-01-01T00:00:00.0000000Z' })).toBe(0);
+        expect(uploadedAt(undefined)).toBe(0);
+    });
+});
+
+describe('sortByRecent', () => {
+    test('puts the newest uploads first and keeps undated ones in order', () => {
+        const avatars = [
+            { id: 'undated1' },
+            { id: 'old', updated_at: '2024-01-01T00:00:00Z' },
+            { id: 'new', updated_at: '2026-01-01T00:00:00Z' },
+            { id: 'undated2' }
+        ];
+        expect(sortByRecent(avatars).map((a) => a.id)).toEqual(['new', 'old', 'undated1', 'undated2']);
+    });
+});
+
+describe('pruneSeen', () => {
+    test('forgets avatars shown longer ago than the cutoff', () => {
+        const seen = { recent: NOW - 5 * DAY, stale: NOW - 31 * DAY, junk: 'x' };
+        expect(pruneSeen(seen, { now: NOW, maxAgeDays: 30 })).toEqual({ recent: NOW - 5 * DAY });
+    });
+
+    test('tolerates junk input', () => {
+        expect(pruneSeen(null)).toEqual({});
+    });
+});
+
+describe('buildMixedPage', () => {
+    test('alternates familiar and new creators', () => {
+        const familiar = [
+            { id: 'f1', authorId: 'a' },
+            { id: 'f2', authorId: 'b' }
+        ];
+        const discovery = [
+            { id: 'd1', authorId: 'x' },
+            { id: 'd2', authorId: 'y' }
+        ];
+        const { page } = buildMixedPage(familiar, discovery, { size: 4 });
+        expect(page.map((a) => a.id)).toEqual(['f1', 'd1', 'f2', 'd2']);
+    });
+
+    test('fills from the other side when one runs dry, and returns the rest', () => {
+        const familiar = [{ id: 'f1', authorId: 'a' }];
+        const discovery = [
+            { id: 'd1', authorId: 'x' },
+            { id: 'd2', authorId: 'y' },
+            { id: 'd3', authorId: 'z' }
+        ];
+        const result = buildMixedPage(familiar, discovery, { size: 3 });
+        expect(result.page.map((a) => a.id)).toEqual(['f1', 'd1', 'd2']);
+        expect(result.familiar).toEqual([]);
+        expect(result.discovery.map((a) => a.id)).toEqual(['d3']);
+    });
+
+    test('spreads one creator out instead of stacking their uploads', () => {
+        const familiar = [
+            { id: 'a1', authorId: 'a' },
+            { id: 'a2', authorId: 'a' },
+            { id: 'a3', authorId: 'a' },
+            { id: 'b1', authorId: 'b' },
+            { id: 'c1', authorId: 'c' }
+        ];
+        const { page } = buildMixedPage(familiar, [], { size: 5, gap: 2 });
+        expect(page.map((a) => a.id)).toEqual(['a1', 'b1', 'c1', 'a2', 'a3']);
+    });
+
+    test('does not modify the queues it was given', () => {
+        const familiar = [{ id: 'f1', authorId: 'a' }];
+        buildMixedPage(familiar, [], { size: 1 });
+        expect(familiar).toHaveLength(1);
     });
 });
