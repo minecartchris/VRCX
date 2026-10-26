@@ -1,8 +1,13 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+    PERFORMANCE_RANKS,
+    avatarPerformance,
+    avatarPlatforms,
     jaccard,
+    normalizePlatform,
     parseQuery,
+    performanceRank,
     runQuery,
     searchAvatars,
     searchableText,
@@ -188,9 +193,246 @@ describe('searchAvatars', () => {
     });
 });
 
+// ── avtr.zip's newer facets ────────────────────────────────
+
+/**
+ * A second fixture set, with the fields avtr.zip filters on that the original
+ * three do not carry.
+ */
+const faceted = [
+    {
+        id: 'avtr_pc',
+        name: 'PC Only Excellent',
+        tags: [],
+        features: ['locomotion:gogoloco', 'tracking:face-tracking'],
+        platforms: ['standalonewindows'],
+        performance: { standalonewindows: 'Excellent' },
+        price: 0,
+        likes: 10,
+        used: 500
+    },
+    {
+        id: 'avtr_quest',
+        name: 'Cross Platform Good',
+        tags: [],
+        features: ['locomotion:gogoloco', 'body:tail'],
+        unityPackages: [
+            { platform: 'standalonewindows', performanceRating: 'Good' },
+            { platform: 'android', performanceRating: 'Good' }
+        ],
+        price: 1500,
+        impostor: true,
+        likes: 300,
+        used: 20
+    },
+    {
+        id: 'avtr_poor',
+        name: 'Quest Poor',
+        tags: [],
+        features: ['physbone:tail'],
+        platforms: ['android'],
+        performance: { android: 'Very Poor' },
+        price: 500,
+        likes: 50,
+        used: 100
+    }
+];
+
+/**
+ * @param {string} query
+ * @returns {string[]} Matching ids, in result order
+ */
+function facetIds(query) {
+    return searchAvatars(faceted, query).map((a) => a.id);
+}
+
+describe('feature queries', () => {
+    test('resolves a full feature id', () => {
+        expect(parseQuery('feature:locomotion:gogoloco').features).toEqual([
+            { mode: 'any', ids: ['locomotion:gogoloco'] }
+        ]);
+    });
+
+    test('resolves a bare feature name to every namespace that has it', () => {
+        const [clause] = parseQuery('feature:tail').features;
+        expect(clause.ids).toContain('body:tail');
+        expect(clause.ids).toContain('physbone:tail');
+    });
+
+    test('resolves a whole category', () => {
+        const [clause] = parseQuery('feature:tracking').features;
+        expect(clause.ids.length).toBeGreaterThan(1);
+        expect(clause.ids.every((id) => id.startsWith('tracking:'))).toBe(true);
+    });
+
+    test('resolves a human label', () => {
+        expect(parseQuery('feature:"GoGoLoco"').features[0].ids).toContain('locomotion:gogoloco');
+    });
+
+    test('filters by a single feature', () => {
+        expect(facetIds('feature:gogoloco').sort()).toEqual(['avtr_pc', 'avtr_quest']);
+    });
+
+    test('a bare name matches either namespace', () => {
+        expect(facetIds('feature:tail').sort()).toEqual(['avtr_poor', 'avtr_quest']);
+    });
+
+    test('all() requires every listed feature', () => {
+        expect(facetIds('feature:all(gogoloco, face-tracking)')).toEqual(['avtr_pc']);
+        expect(facetIds('feature:all(gogoloco, headpat)')).toEqual([]);
+    });
+
+    test('any() takes either', () => {
+        expect(facetIds('feature:any(face-tracking, physbone:tail)').sort()).toEqual(['avtr_pc', 'avtr_poor']);
+    });
+
+    test('an unknown feature matches nothing rather than erroring', () => {
+        expect(facetIds('feature:not-a-real-feature')).toEqual([]);
+    });
+
+    test('free text reaches feature ids', () => {
+        expect(facetIds('gogoloco').sort()).toEqual(['avtr_pc', 'avtr_quest']);
+    });
+});
+
+describe('platform and performance queries', () => {
+    test('parses a platform build check', () => {
+        expect(parseQuery('quest:true').platforms).toEqual([{ platform: 'quest', present: true }]);
+    });
+
+    test('parses a performance comparison', () => {
+        expect(parseQuery('quest:>=Good').platforms).toEqual([{ platform: 'quest', op: '>=', rating: 'good' }]);
+    });
+
+    test('filters by having a build for a platform', () => {
+        expect(facetIds('quest:true').sort()).toEqual(['avtr_poor', 'avtr_quest']);
+        expect(facetIds('quest:none')).toEqual(['avtr_pc']);
+    });
+
+    test('>= reads as quality, so it includes better ratings', () => {
+        expect(facetIds('pc:>=Good').sort()).toEqual(['avtr_pc', 'avtr_quest']);
+    });
+
+    test('> excludes the named rating itself', () => {
+        expect(facetIds('pc:>Good')).toEqual(['avtr_pc']);
+    });
+
+    test('<= reads as quality too', () => {
+        expect(facetIds('quest:<=Good').sort()).toEqual(['avtr_poor', 'avtr_quest']);
+    });
+
+    test('a bare rating is an exact match', () => {
+        expect(facetIds('quest:Good')).toEqual(['avtr_quest']);
+    });
+
+    test('reads ratings from unityPackages as well as a performance map', () => {
+        expect(avatarPerformance(faceted[1], 'quest')).toBe('good');
+        expect(avatarPerformance(faceted[0], 'pc')).toBe('excellent');
+    });
+
+    test('normalizes the spelling of a two-word rating', () => {
+        expect(facetIds('quest:VeryPoor')).toEqual(['avtr_poor']);
+    });
+
+    test('platform aliases agree', () => {
+        expect(facetIds('android:true').sort()).toEqual(facetIds('quest:true').sort());
+        expect(facetIds('windows:true').sort()).toEqual(facetIds('pc:true').sort());
+    });
+
+    test('an avatar with no rating for a platform does not match a comparison', () => {
+        expect(facetIds('ios:>=Good')).toEqual([]);
+    });
+});
+
+describe('price, paid and impostor queries', () => {
+    test('paid:false keeps only free avatars', () => {
+        expect(facetIds('paid:false')).toEqual(['avtr_pc']);
+    });
+
+    test('free:true is the inverse of paid:true', () => {
+        expect(facetIds('free:true')).toEqual(facetIds('paid:false'));
+    });
+
+    test('price comparisons', () => {
+        expect(facetIds('price:<1000').sort()).toEqual(['avtr_pc', 'avtr_poor']);
+        expect(facetIds('price:>=1500')).toEqual(['avtr_quest']);
+        expect(facetIds('price:0')).toEqual(['avtr_pc']);
+    });
+
+    test('price accepts a min-max range', () => {
+        expect(parseQuery('price:100-600').price).toEqual({ op: 'range', min: 100, max: 600 });
+        expect(facetIds('price:100-600')).toEqual(['avtr_poor']);
+    });
+
+    test('price:free is a shorthand for zero', () => {
+        expect(facetIds('price:free')).toEqual(['avtr_pc']);
+    });
+
+    test('impostor filtering', () => {
+        expect(facetIds('impostor:true')).toEqual(['avtr_quest']);
+        expect(facetIds('impostor:false').sort()).toEqual(['avtr_pc', 'avtr_poor']);
+    });
+});
+
+describe('sort directives', () => {
+    test('sort:likes defaults to most liked first', () => {
+        expect(parseQuery('sort:likes').sorts).toEqual([{ field: 'likes', direction: 'desc' }]);
+        expect(facetIds('sort:likes')).toEqual(['avtr_quest', 'avtr_poor', 'avtr_pc']);
+    });
+
+    test('sort:used defaults to most worn first', () => {
+        expect(facetIds('sort:used')).toEqual(['avtr_pc', 'avtr_poor', 'avtr_quest']);
+    });
+
+    test('sort:price defaults to cheapest first', () => {
+        expect(facetIds('sort:price')).toEqual(['avtr_pc', 'avtr_poor', 'avtr_quest']);
+    });
+
+    test('an explicit direction overrides the natural one', () => {
+        expect(parseQuery('sort:likes(asc)').sorts).toEqual([{ field: 'likes', direction: 'asc' }]);
+        expect(facetIds('sort:likes(asc)')).toEqual(['avtr_pc', 'avtr_poor', 'avtr_quest']);
+    });
+
+    test('numeric sorts compare as numbers, not strings', () => {
+        // String ordering would put 500 before 1500 here.
+        expect(facetIds('sort:price(desc)')).toEqual(['avtr_quest', 'avtr_poor', 'avtr_pc']);
+    });
+
+    test('sort:newest reads created_at descending', () => {
+        expect(parseQuery('sort:newest').sorts).toEqual([{ field: 'created_at', direction: 'desc' }]);
+    });
+});
+
+describe('combined queries', () => {
+    test('facets narrow each other', () => {
+        expect(facetIds('feature:gogoloco quest:true paid:true')).toEqual(['avtr_quest']);
+    });
+
+    test('a facet query with no text still returns matches', () => {
+        expect(facetIds('pc:>=Good').length).toBe(2);
+    });
+});
+
 describe('helpers', () => {
     test('searchableText joins the searchable fields', () => {
         expect(searchableText(avatars[0])).toContain('glowing_eyes');
+    });
+
+    test('avatarPlatforms reads a platforms list, unityPackages and a performance map', () => {
+        expect(Array.from(avatarPlatforms(faceted[0])).sort()).toEqual(['pc']);
+        expect(Array.from(avatarPlatforms(faceted[1])).sort()).toEqual(['pc', 'quest']);
+    });
+
+    test('performanceRank orders best to worst', () => {
+        expect(performanceRank('Excellent')).toBeLessThan(performanceRank('Good'));
+        expect(performanceRank('Very Poor')).toBe(PERFORMANCE_RANKS.length - 1);
+        expect(performanceRank('nonsense')).toBe(-1);
+    });
+
+    test('normalizePlatform folds the aliases', () => {
+        expect(normalizePlatform('StandaloneWindows')).toBe('pc');
+        expect(normalizePlatform('android')).toBe('quest');
+        expect(normalizePlatform('switch')).toBeNull();
     });
 
     test('trigramSimilarity is 1 for identical strings and 0 for empty', () => {

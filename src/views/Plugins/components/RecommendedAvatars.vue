@@ -22,14 +22,57 @@
                 </ul>
             </details>
 
+            <details class="text-xs text-muted-foreground">
+                <summary class="cursor-pointer select-none">
+                    {{ t('view.plugins.avatars.features.header') }}
+                    <span v-if="selectedFeatures.length > 0">({{ selectedFeatures.length }})</span>
+                </summary>
+                <div class="mt-2">
+                    <p class="mt-0 mb-2">{{ t('view.plugins.avatars.features.description') }}</p>
+                    <AvatarFeatureFilter v-model="selectedFeatures" v-model:mode="featureMode" />
+                </div>
+            </details>
+
+            <details class="text-xs text-muted-foreground">
+                <summary class="cursor-pointer select-none">{{ t('view.plugins.avatars.live.header') }}</summary>
+                <div class="mt-2 flex flex-col gap-2">
+                    <p class="m-0">{{ t('view.plugins.avatars.live.description') }}</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Input
+                            v-model="liveSearchUrl"
+                            class="min-w-64 flex-1"
+                            :placeholder="t('view.plugins.avatars.live.placeholder')"
+                            :aria-label="t('view.plugins.avatars.live.header')"
+                            @change="saveLiveSearchUrl" />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="!liveSearchUrl.trim() || !effectiveQuery || liveLoading"
+                            @click="runLiveSearch">
+                            <i v-if="liveLoading" class="ri-loader-4-line animate-spin" />
+                            {{ t('view.plugins.avatars.live.search') }}
+                        </Button>
+                    </div>
+                    <p v-if="liveError" class="m-0 text-destructive">{{ liveError }}</p>
+                    <p v-else-if="liveResults.length > 0" class="m-0">
+                        {{ t('view.plugins.avatars.live.fetched', { count: liveResults.length }) }}
+                    </p>
+                </div>
+            </details>
+
             <p class="m-0 text-xs text-muted-foreground">
                 {{ t('view.plugins.avatars.search.pool', { count: searchPool.length }) }}
             </p>
 
-            <div v-if="query.trim() && searchResults.length === 0" class="py-4 text-sm text-muted-foreground">
+            <p v-if="featureQuery" class="m-0 text-xs text-muted-foreground">
+                {{ t('view.plugins.avatars.features.applied') }}
+                <code class="rounded bg-muted px-1 py-0.5">{{ featureQuery }}</code>
+            </p>
+
+            <div v-if="effectiveQuery && searchResults.length === 0" class="py-4 text-sm text-muted-foreground">
                 {{ t('view.plugins.avatars.search.empty') }}
             </div>
-            <div v-else-if="query.trim()" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-2">
+            <div v-else-if="effectiveQuery" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-2">
                 <AvatarSuggestionCard
                     v-for="avatar in searchResults"
                     :key="avatar.id"
@@ -46,7 +89,10 @@
             </template>
 
             <SettingsItem :label="t('view.plugins.avatars.database.action')" :description="providerDescription">
-                <Button size="sm" :disabled="!hasProvider || loadingDatabase || loadingHistory" @click="startDatabaseRecommendations">
+                <Button
+                    size="sm"
+                    :disabled="!hasProvider || loadingDatabase || loadingHistory"
+                    @click="startDatabaseRecommendations">
                     <i v-if="loadingDatabase" class="ri-loader-4-line animate-spin" />
                     {{
                         loadingDatabase
@@ -104,6 +150,7 @@
 
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
+    import AvatarFeatureFilter from './AvatarFeatureFilter.vue';
     import AvatarSuggestionCard from './AvatarSuggestionCard.vue';
     import SettingsGroup from '@/views/Settings/components/SettingsGroup.vue';
     import SettingsItem from '@/views/Settings/components/SettingsItem.vue';
@@ -121,6 +168,8 @@
         sortByRecent
     } from '../recommendations';
     import { searchAvatars } from '../avatarQuery';
+    import { buildFeatureQuery } from '../avtrFeatures';
+    import { getLiveSearchUrl, searchLiveAvatars, setLiveSearchUrl } from '../avtrLiveSearch';
 
     /** Cards per page. */
     const PAGE_SIZE = 24;
@@ -142,15 +191,57 @@
     const history = ref([]);
     const loadingHistory = ref(false);
     const query = ref('');
+    /** Feature ids picked in the filter panel, kept out of the text box. */
+    const selectedFeatures = ref([]);
+    const featureMode = ref(/** @type {'any' | 'all'} */ ('all'));
 
     const syntaxExamples = computed(() => [
         { query: 'cat ears', hint: t('view.plugins.avatars.search.hint_text') },
         { query: '-nsfw cute', hint: t('view.plugins.avatars.search.hint_exclude') },
         { query: 'author:somecreator', hint: t('view.plugins.avatars.search.hint_author') },
         { query: 'tag:any(kemono, fox)', hint: t('view.plugins.avatars.search.hint_any') },
+        { query: 'feature:gogoloco', hint: t('view.plugins.avatars.search.hint_feature') },
+        { query: 'quest:>=Good', hint: t('view.plugins.avatars.search.hint_performance') },
+        { query: 'paid:false', hint: t('view.plugins.avatars.search.hint_paid') },
+        { query: 'price:100-500', hint: t('view.plugins.avatars.search.hint_price') },
+        { query: 'impostor:true', hint: t('view.plugins.avatars.search.hint_impostor') },
         { query: 'fuzzy:0.6 protogen', hint: t('view.plugins.avatars.search.hint_fuzzy') },
-        { query: 'sort:name(asc)', hint: t('view.plugins.avatars.search.hint_sort') }
+        { query: 'sort:likes', hint: t('view.plugins.avatars.search.hint_sort') }
     ]);
+
+    // Optional live provider. Nothing is configured by default: avtr.zip's own
+    // search is challenge-gated, so this is here for a reachable endpoint you
+    // supply yourself. Results join the local pool and are filtered by the same
+    // query, so a provider that only does free text still works.
+
+    const liveSearchUrl = ref('');
+    const liveResults = ref([]);
+    const liveLoading = ref(false);
+    const liveError = ref('');
+
+    async function saveLiveSearchUrl() {
+        await setLiveSearchUrl(liveSearchUrl.value);
+    }
+
+    async function runLiveSearch() {
+        liveLoading.value = true;
+        liveError.value = '';
+        try {
+            liveResults.value = await searchLiveAvatars(effectiveQuery.value, { url: liveSearchUrl.value.trim() });
+        } catch (err) {
+            console.error('Live avatar search failed', err);
+            liveError.value = err instanceof Error ? err.message : String(err);
+            liveResults.value = [];
+        } finally {
+            liveLoading.value = false;
+        }
+    }
+
+    /** The `feature:` fragment the filter panel contributes. */
+    const featureQuery = computed(() => buildFeatureQuery(selectedFeatures.value, featureMode.value));
+
+    /** What actually gets searched: the text box plus the filter panel. */
+    const effectiveQuery = computed(() => [query.value.trim(), featureQuery.value].filter(Boolean).join(' '));
 
     /**
      * Everything searchable: your history, your favorites, and anything the
@@ -158,7 +249,7 @@
      */
     const searchPool = computed(() => {
         const byId = new Map();
-        for (const list of [history.value, favoriteAvatarRefs.value, databaseFetched.value]) {
+        for (const list of [history.value, favoriteAvatarRefs.value, databaseFetched.value, liveResults.value]) {
             for (const avatar of list) {
                 if (avatar?.id && !byId.has(avatar.id)) {
                     byId.set(avatar.id, avatar);
@@ -172,7 +263,7 @@
         (favoriteStore.favoriteAvatars ?? []).map((favorite) => favorite?.ref ?? favorite).filter((a) => a?.id)
     );
 
-    const searchResults = computed(() => searchAvatars(searchPool.value, query.value).slice(0, 60));
+    const searchResults = computed(() => searchAvatars(searchPool.value, effectiveQuery.value).slice(0, 60));
 
     const hasProvider = computed(() => Boolean(avatarProviderStore.avatarRemoteDatabaseProvider));
 
@@ -415,5 +506,8 @@
         }
     }
 
-    onMounted(loadHistory);
+    onMounted(async () => {
+        liveSearchUrl.value = await getLiveSearchUrl();
+        await loadHistory();
+    });
 </script>

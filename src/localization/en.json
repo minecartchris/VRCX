@@ -1470,7 +1470,7 @@
                 "search": {
                     "header": "Search avatars",
                     "description": "Keyword search across every avatar VRCX knows about, using the avtr.zip query syntax.",
-                    "placeholder": "e.g. cat ears -nsfw  ·  tag:any(kemono, fox)  ·  fuzzy:0.6 protogen",
+                    "placeholder": "e.g. cat ears -nsfw  ·  feature:gogoloco  ·  quest:>=Good paid:false  ·  sort:likes",
                     "syntax": "Query syntax",
                     "pool": "Searching {count} avatars from your history, favorites and database results.",
                     "empty": "Nothing matched that query.",
@@ -1479,7 +1479,33 @@
                     "hint_author": "match a specific creator by name or id",
                     "hint_any": "at least one of these tags; use all(...) to require every one",
                     "hint_fuzzy": "approximate matching, 0 is loose and 1 is near-exact",
-                    "hint_sort": "sort by name, authorName, createdAt or updatedAt"
+                    "hint_sort": "sort by likes, used, price, name, created or updated",
+                    "hint_feature": "match an avatar feature by id, name, category or label",
+                    "hint_performance": "performance on a platform; also pc: and ios:, with >= > <= < or =",
+                    "hint_paid": "free avatars only; paid:true for paid ones",
+                    "hint_price": "a price range; also price:<1000 and price:free",
+                    "hint_impostor": "only avatars that have an impostor"
+                },
+                "features": {
+                    "header": "Filter by feature",
+                    "description": "avtr.zip's feature vocabulary. Ticking features here adds a feature: clause to the search; it only matches avatars whose feature list your provider actually supplies.",
+                    "search_placeholder": "Find a feature, e.g. gogoloco or face tracking",
+                    "mode_all": "Has all",
+                    "mode_any": "Has any",
+                    "refresh": "Refresh list",
+                    "refresh_failed": "Could not refresh from avtr.zip, using the bundled list.",
+                    "clear": "Clear",
+                    "selected": "{count} selected",
+                    "none_selected": "No features selected.",
+                    "no_matches": "No feature matches that.",
+                    "applied": "Applied to the search:"
+                },
+                "live": {
+                    "header": "Live search provider (optional)",
+                    "description": "avtr.zip's own search is behind a bot challenge, so VRCX cannot call it and nothing is set here by default. If you have a reachable endpoint that answers GET ?q=<query>&n=<limit> with a list of avatars, results from it join the pool above and are filtered by the same query.",
+                    "placeholder": "https://example.com/avatar/search",
+                    "search": "Query provider",
+                    "fetched": "{count} avatars from the provider are in the pool."
                 },
                 "database": {
                     "header": "From the avatar database",
