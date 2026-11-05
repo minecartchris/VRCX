@@ -1,10 +1,14 @@
 /**
- * Avtr.zip's feature vocabulary, as published by its open `/v3/features` endpoint.
+ * Avtr.zip's feature vocabulary, from its `/v3/features` endpoint.
  *
  * Bundled so `feature:` queries and the Features filter work offline and on first
  * paint; `fetchFeatureCatalog()` refreshes it from the live endpoint when you want
  * newly added features. Counts are avtr.zip corpus-wide and only used to order the
  * filter list, so a stale count is harmless.
+ *
+ * This snapshot was taken anonymously, so it is the SFW list. A refresh made
+ * while VRCX is connected to avtr.zip gets the full vocabulary, NSFW entries
+ * included and flagged — see `fetchFeatureCatalog`.
  *
  * Snapshot: 415 features across 24 categories.
  */
@@ -49,6 +53,8 @@ export const FEATURE_CATEGORIES = [
  * @property {string} label Human name as avtr.zip shows it
  * @property {string} category The part before the colon
  * @property {number} count How many avatars in avtr.zip's corpus have it
+ * @property {boolean} [nsfw] Only ever set by an authenticated refresh, which
+ *   is the only way the NSFW entries are listed at all
  */
 
 /** @type {AvtrFeature[]} */

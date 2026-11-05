@@ -1,20 +1,28 @@
 /**
- * Optional live avatar-search provider.
+ * Live avatar search.
  *
- * Avtr.zip's own search sits behind a Cloudflare Turnstile challenge, so VRCX
- * cannot call it directly and nothing is configured by default. This module
- * exists so that if you do have a reachable endpoint — avtr.zip publishing a
- * VRCX-style route, a mirror, or your own proxy — you can point the Plugins
- * avatar search at it without touching the query language: results are mapped
- * into the same avatar shape the local engine already filters and sorts.
+ * There are two ways to reach one, and `searchLive` picks between them:
  *
- * Expected contract of whatever you configure:
+ * 1. Avtr.zip's official v3 API, once VRCX is connected to it in Plugins > Avatars. This is the normal path — see
+ *    `avtrApi` and `avtrAuth`. It used to be impossible: their search sat behind a Cloudflare Turnstile challenge a
+ *    desktop app cannot solve, which is why this module started life as the custom-endpoint shim below.
+ * 2. A custom endpoint you configure yourself: a mirror, a proxy, or anything else answering the contract below. Still
+ *    supported, still unset by default, and now only used when there is no avtr.zip connection.
+ *
+ * Either way results are mapped into the same avatar shape the local engine
+ * already filters and sorts, so the query language is untouched.
+ *
+ * Expected contract of a custom endpoint:
  * GET <url>?q=<query>&n=<limit>
  * 200 with either a bare array of avatars or `{ items: [...] }`.
  * Field names may be camelCase or snake_case; both are accepted.
  */
 
 import configRepository from '../../services/config';
+// Aliased: `avatarQuery` exports a `searchAvatars` too, and that one is the
+// local engine rather than a request.
+import { searchAvatars as searchAvtrZipAvatars } from './avtrApi';
+import { isConnected } from './avtrAuth';
 
 export const LIVE_SEARCH_URL_KEY = 'VRCX_avtrLiveSearchUrl';
 
@@ -166,4 +174,62 @@ export async function searchLiveAvatars(query, { fetchImpl = fetch, url, limit =
         throw new Error(`Live avatar search failed (${response?.status ?? 'no response'})`);
     }
     return normalizeLiveResults(await response.json());
+}
+
+/**
+ * One page of live results, whichever provider answered.
+ *
+ * @typedef {object} LiveSearchResult
+ * @property {object[]} avatars
+ * @property {'avtr.zip' | 'custom' | 'none'} source Which provider answered
+ * @property {string[]} warnings Parts of the query that were reinterpreted
+ * @property {number | null} total Match count, null when not reported
+ * @property {boolean} totalIsEstimate Whether `total` is rounded
+ * @property {string | null} nextCursor
+ * @property {boolean} hasMore The only end-of-results signal to trust
+ */
+
+/** @returns {LiveSearchResult} An empty result from no provider at all */
+function noProviderResult() {
+    return {
+        avatars: [],
+        source: 'none',
+        warnings: [],
+        total: null,
+        totalIsEstimate: false,
+        nextCursor: null,
+        hasMore: false
+    };
+}
+
+/**
+ * Searches avtr.zip when VRCX is connected, the custom endpoint otherwise.
+ *
+ * Returns `source: 'none'` rather than throwing when neither is available, so
+ * the caller can tell "nothing is set up" apart from "the search failed".
+ *
+ * @param {string} query
+ * @param {object} [options]
+ * @param {number} [options.limit]
+ * @param {string} [options.cursor] Only meaningful for avtr.zip
+ * @param {string} [options.url] Forces the custom endpoint
+ * @param {typeof fetch} [options.fetchImpl]
+ * @returns {Promise<LiveSearchResult>}
+ */
+export async function searchLive(query, { limit = DEFAULT_LIMIT, cursor, url, fetchImpl = fetch } = {}) {
+    if (!url && (await isConnected())) {
+        const result = await searchAvtrZipAvatars({ q: query, limit, cursor, fetchImpl });
+        return { ...result, source: 'avtr.zip' };
+    }
+
+    const base = url ?? (await getLiveSearchUrl());
+    if (!base) {
+        return noProviderResult();
+    }
+
+    return {
+        ...noProviderResult(),
+        avatars: await searchLiveAvatars(query, { url: base, limit, fetchImpl }),
+        source: 'custom'
+    };
 }

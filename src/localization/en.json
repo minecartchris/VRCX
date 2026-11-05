@@ -1501,11 +1501,42 @@
                     "applied": "Applied to the search:"
                 },
                 "live": {
-                    "header": "Live search provider (optional)",
-                    "description": "avtr.zip's own search is behind a bot challenge, so VRCX cannot call it and nothing is set here by default. If you have a reachable endpoint that answers GET ?q=<query>&n=<limit> with a list of avatars, results from it join the pool above and are filtered by the same query.",
+                    "header": "Custom search endpoint (optional)",
+                    "description": "Used only when VRCX is not connected to avtr.zip above. If you have another reachable endpoint that answers GET ?q=<query>&n=<limit> with a list of avatars, results from it join the pool and are filtered by the same query.",
                     "placeholder": "https://example.com/avatar/search",
-                    "search": "Query provider",
-                    "fetched": "{count} avatars from the provider are in the pool."
+                    "search": "Search avtr.zip",
+                    "not_connected": "Connect to avtr.zip above, or set a custom endpoint, to search online.",
+                    "total": "{count} matches",
+                    "total_estimate": "about {count} matches"
+                },
+                "avtr": {
+                    "header": "avtr.zip account",
+                    "description": "Connecting lets VRCX search avtr.zip's whole avatar index, read your likes and recommendations, and like avatars for you. Approve it once at avtr.zip/activate; VRCX keeps the connection until you disconnect.",
+                    "client_id": "Client id",
+                    "client_id_hint": "Register an app at avtr.zip/developers/apps with the device code grant, then paste its avtc_… id here.",
+                    "client_secret": "Client secret",
+                    "client_secret_hint": "Only for a confidential app. Leave this empty for a public client, which is what avtr.zip recommends for a desktop app.",
+                    "secret_warning": "This secret is stored unencrypted on this machine, and anyone who gets it can act as your whole app. Don't put it in a build you share — use a public client for that.",
+                    "connect": "Connect",
+                    "connect_hint": "Opens avtr.zip so you can approve VRCX.",
+                    "connected": "Connected",
+                    "disconnect": "Disconnect",
+                    "activate_hint": "Enter this code at avtr.zip/activate to approve VRCX. It expires in 10 minutes.",
+                    "open_activate": "Open avtr.zip",
+                    "copy_code": "Copy code",
+                    "cancel": "Cancel",
+                    "waiting": "Waiting for approval…",
+                    "like": "Like on avtr.zip",
+                    "unlike": "Remove this like"
+                },
+                "recommended": {
+                    "header": "Recommended by avtr.zip",
+                    "description": "Avatars avtr.zip picks from the avatars you have liked and worn recently. The list changes every time you like something.",
+                    "action": "avtr.zip recommendations",
+                    "hint": "Needs the likes:read permission, which you granted when connecting.",
+                    "fetch": "Get recommendations",
+                    "refresh": "Refresh",
+                    "empty": "avtr.zip had nothing to recommend yet. Like a few avatars there first."
                 },
                 "database": {
                     "header": "From the avatar database",

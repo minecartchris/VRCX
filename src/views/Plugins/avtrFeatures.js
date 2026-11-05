@@ -10,6 +10,8 @@
  * full id, the bare name, a whole category, or a label substring.
  */
 
+import { getFeatures } from './avtrApi';
+import { isConnected } from './avtrAuth';
 import { FEATURE_CATALOG, FEATURE_CATALOG_URL, FEATURE_CATEGORIES } from './avtrFeatureCatalog';
 
 export { FEATURE_CATALOG, FEATURE_CATALOG_URL, FEATURE_CATEGORIES };
@@ -260,7 +262,8 @@ export function parseFeatureCatalog(payload) {
             id: item.id,
             label: String(item?.label ?? id.split(':').slice(1).join(':')),
             category: String(item?.category ?? id.split(':')[0]),
-            count: Number.isFinite(item?.count) ? item.count : 0
+            count: Number.isFinite(item?.count) ? item.count : 0,
+            nsfw: Boolean(item?.nsfw)
         });
     }
 
@@ -273,17 +276,26 @@ export function parseFeatureCatalog(payload) {
 /**
  * Refreshes the vocabulary from avtr.zip.
  *
- * This is the one open endpoint avtr.zip serves without a challenge; their
- * avatar search is not callable this way. Callers should fall back to the
- * bundled snapshot on failure rather than surfacing an error.
+ * Connected, this goes through the API client and gets the complete
+ * vocabulary: an OAuth token is shown the NSFW entries too, flagged with
+ * `nsfw`, while an anonymous caller only ever sees the SFW list. Not
+ * connected, it falls back to the unauthenticated endpoint, which is one of
+ * the few avtr.zip still serves without a token.
+ *
+ * Callers should fall back to the bundled snapshot on failure rather than
+ * surfacing an error.
  *
  * @param {object} [options]
  * @param {typeof fetch} [options.fetchImpl]
- * @param {string} [options.url]
+ * @param {string} [options.url] Forces the unauthenticated endpoint
  * @returns {Promise<import('./avtrFeatureCatalog').AvtrFeature[]>}
  */
-export async function fetchFeatureCatalog({ fetchImpl = fetch, url = FEATURE_CATALOG_URL } = {}) {
-    const response = await fetchImpl(url, { headers: { Accept: 'application/json' } });
+export async function fetchFeatureCatalog({ fetchImpl = fetch, url } = {}) {
+    if (!url && (await isConnected())) {
+        return parseFeatureCatalog({ items: await getFeatures({ fetchImpl }) });
+    }
+
+    const response = await fetchImpl(url ?? FEATURE_CATALOG_URL, { headers: { Accept: 'application/json' } });
     if (!response?.ok) {
         throw new Error(`Feature catalog request failed (${response?.status ?? 'no response'})`);
     }

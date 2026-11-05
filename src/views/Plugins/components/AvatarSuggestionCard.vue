@@ -30,6 +30,19 @@
             @click="emit('hide')">
             <i class="ri-eye-off-line" />
         </button>
+        <!-- A liked avatar keeps its heart visible; an unliked one reveals it
+             on hover, like the hide button. -->
+        <button
+            v-if="likeLabel"
+            type="button"
+            class="absolute top-3 left-3 flex size-7 items-center justify-center rounded-md bg-background/80 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 cursor-pointer"
+            :class="liked ? 'text-destructive opacity-100' : 'text-muted-foreground opacity-0 hover:text-foreground'"
+            :title="likeLabel"
+            :aria-label="likeLabel"
+            :aria-pressed="liked"
+            @click="emit('like')">
+            <i :class="liked ? 'ri-heart-fill' : 'ri-heart-line'" />
+        </button>
     </div>
 </template>
 
@@ -40,9 +53,13 @@
         avatar: { type: Object, required: true },
         caption: { type: String, default: '' },
         /** Shows a hide button with this label when set. */
-        hideLabel: { type: String, default: '' }
+        hideLabel: { type: String, default: '' },
+        /** Shows a like toggle with this label when set. */
+        likeLabel: { type: String, default: '' },
+        /** Current like state, for the toggle's appearance. */
+        liked: { type: Boolean, default: false }
     });
-    const emit = defineEmits(['click', 'hide']);
+    const emit = defineEmits(['click', 'hide', 'like']);
 
     const thumbnail = computed(() => props.avatar.thumbnailImageUrl || props.avatar.imageUrl || '');
 </script>
